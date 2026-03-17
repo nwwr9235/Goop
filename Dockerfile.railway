@@ -1,0 +1,35 @@
+# Dockerfile.railway
+# Optimized for Railway.app deployment
+
+FROM python:3.11-slim
+
+# ── System dependencies ───────────────────────────────────────────────────────
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    git \
+    curl \
+    wget \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Working directory ─────────────────────────────────────────────────────────
+WORKDIR /app
+
+# ── Python dependencies (cached layer) ───────────────────────────────────────
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# ── Copy source code ──────────────────────────────────────────────────────────
+COPY . .
+
+# ── Create temp music directory ───────────────────────────────────────────────
+RUN mkdir -p /tmp/arabbot_music
+
+# ── Environment defaults (overridden by Railway Variables) ────────────────────
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    DOWNLOAD_DIR=/tmp/arabbot_music
+
+# ── Start bot ─────────────────────────────────────────────────────────────────
+CMD ["python", "main.py"]

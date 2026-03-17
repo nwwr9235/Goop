@@ -1,0 +1,34 @@
+version: "3.9"
+
+services:
+  arabbot:
+    build: .
+    container_name: arabbot
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      - mongodb
+    volumes:
+      - ./arabbot_session.session:/app/arabbot_session.session
+      - /tmp/arabbot_music:/tmp/arabbot_music
+    networks:
+      - botnet
+
+  mongodb:
+    image: mongo:7.0
+    container_name: arabbot_mongo
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - botnet
+    environment:
+      MONGO_INITDB_DATABASE: arabbot
+
+volumes:
+  mongo_data:
+
+networks:
+  botnet:
+    driver: bridge
