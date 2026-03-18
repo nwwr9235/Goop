@@ -1,5 +1,5 @@
 """
-bot/__init__.py — متوافق مع pytgcalls==2.1.0
+bot/__init__.py — متوافق مع pytgcalls==2.0.0
 """
 
 from pyrogram import Client
