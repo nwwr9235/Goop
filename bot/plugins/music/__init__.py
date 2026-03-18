@@ -1,1 +1,1 @@
-# info plugin
+# music plugin
