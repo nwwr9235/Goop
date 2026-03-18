@@ -1,15 +1,18 @@
+# Core Telegram
 pyrogram==2.0.106
 tgcrypto==1.2.5
+py-tgcalls
 
-py-tgcalls==0.9.7
-
+# Database
 motor==3.3.2
 pymongo==4.6.1
 dnspython==2.6.1
 
-yt-dlp
+# Music / Streaming
+yt-dlp>=2024.3.10
 youtube-search-python==1.6.6
 
+# Utilities
 python-dotenv==1.0.1
 aiofiles==23.2.1
 aiohttp==3.9.3
