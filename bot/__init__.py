@@ -3,7 +3,7 @@ bot/__init__.py — متوافق مع pytgcalls==2.0.0
 """
 
 from pyrogram import Client
-from pytgcalls import PyTgCalls
+from py_tgcalls import PyTgCalls
 from config import config
 import logging
 
