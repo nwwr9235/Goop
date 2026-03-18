@@ -4,8 +4,11 @@ RUN apt update && apt install -y ffmpeg
 
 WORKDIR /app
 
-COPY . .
+# Copy requirements first (forces reinstall when requirements.txt changes)
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-RUN pip install -r requirements.txt
+# Copy the rest of the source code
+COPY . .
 
 CMD ["python", "main.py"]
