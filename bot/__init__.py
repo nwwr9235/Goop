@@ -6,7 +6,7 @@ from config import config
 logger = logging.getLogger(name)
 
 class ArabBot(Client):
-def init(self):
+def    init(self):
 super().init(
 name="arabbot",
 api_id=config.API_ID,
