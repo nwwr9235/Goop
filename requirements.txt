@@ -2,12 +2,9 @@
 pyrogram==2.0.106
 tgcrypto==1.2.5
 
-# tgcalls — يجب تثبيته قبل pytgcalls
-# الإصدار الوحيد المتاح على PyPI
-tgcalls==3.0.0.dev6
-
-# PyTgCalls
-pytgcalls==2.0.0
+# PyTgCalls — نستخدم 2.1.0 لأنه مستقر ويصدّر PyTgCalls بشكل صحيح
+# dev24 غيّر الـ API بشكل كامل وكسر التوافق
+pytgcalls==2.1.0
 
 # Database
 motor==3.3.2

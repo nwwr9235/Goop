@@ -1,3 +1,6 @@
+# Dockerfile.railway
+# Optimized for Railway.app deployment
+
 FROM python:3.11-slim
 
 # ── System dependencies ───────────────────────────────────────────────────────
@@ -12,27 +15,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # ── Working directory ─────────────────────────────────────────────────────────
 WORKDIR /app
 
-# ── Python dependencies ───────────────────────────────────────────────────────
+# ── Python dependencies (cached layer) ───────────────────────────────────────
 COPY requirements.txt .
-
 RUN pip install --no-cache-dir --upgrade pip && \
-    # تثبيت tgcalls أولاً بدون التحقق من الإصدار المطلوب
-    pip install --no-cache-dir tgcalls==3.0.0.dev6 && \
-    # تثبيت pytgcalls بدون dependencies لتجاوز مشكلة tgcalls==2.0.0
-    pip install --no-cache-dir --no-deps pytgcalls==2.0.0 && \
-    # تثبيت باقي المكتبات
-    pip install --no-cache-dir \
-        pyrogram==2.0.106 \
-        tgcrypto==1.2.5 \
-        motor==3.3.2 \
-        pymongo==4.6.1 \
-        dnspython==2.6.1 \
-        "yt-dlp>=2024.3.10" \
-        youtube-search-python==1.6.6 \
-        python-dotenv==1.0.1 \
-        aiofiles==23.2.1 \
-        aiohttp==3.9.3 \
-        psutil==5.9.8
+    pip install --no-cache-dir -r requirements.txt
 
 # ── Copy source code ──────────────────────────────────────────────────────────
 COPY . .
@@ -40,10 +26,10 @@ COPY . .
 # ── Create temp music directory ───────────────────────────────────────────────
 RUN mkdir -p /tmp/arabbot_music
 
-# ── Environment ───────────────────────────────────────────────────────────────
+# ── Environment defaults (overridden by Railway Variables) ────────────────────
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     DOWNLOAD_DIR=/tmp/arabbot_music
 
-# ── Start ─────────────────────────────────────────────────────────────────────
+# ── Start bot ─────────────────────────────────────────────────────────────────
 CMD ["python", "main.py"]
