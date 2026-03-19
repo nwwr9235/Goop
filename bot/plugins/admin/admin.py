@@ -1,266 +1,141 @@
-"""
-bot/plugins/admin/admin.py
-Admin moderation commands in Arabic (no slash prefix).
-"""
-
+# plugins/admin/admin.py
+import re
 from pyrogram import Client, filters
-from pyrogram.types import Message, ChatPermissions
-from pyrogram.enums import ChatMemberStatus, ChatType
-from pyrogram.errors import (
-    UserAdminInvalid, ChatAdminRequired, PeerIdInvalid,
-    UserNotParticipant, FloodWait
-)
-from utils import is_admin, extract_user, mention, is_group
-from utils.arabic_commands import (
-    CMD_PROMOTE, CMD_DEMOTE, CMD_BAN, CMD_UNBAN,
-    CMD_MUTE, CMD_UNMUTE, CMD_KICK, CMD_ADMIN_LIST
-)
-import asyncio
-import logging
+from pyrogram.types import ChatPermissions
+from database.models import User
+from utils.decorators import is_admin
 
-logger = logging.getLogger(__name__)
+# Command patterns
+PROMOTE_PATTERN = re.compile(r'رفع\s+@(\w+)')
+DEMOTE_PATTERN = re.compile(r'تنزيل\s+@(\w+)')
+BAN_PATTERN = re.compile(r'حظر\s+@(\w+)')
+UNBAN_PATTERN = re.compile(r'الغاء\s+الحظر\s+@(\w+)')
+MUTE_PATTERN = re.compile(r'كتم\s+@(\w+)')
+UNMUTE_PATTERN = re.compile(r'الغاء\s+الكتم\s+@(\w+)')
+KICK_PATTERN = re.compile(r'طرد\s+@(\w+)')
 
-# ── Filters ───────────────────────────────────────────────────────────────────
-
-def arabic_cmd(cmd: str):
-    """Filter for Arabic text commands."""
-    async def func(flt, client, message: Message):
-        if not message.text:
-            return False
-        return message.text.strip().startswith(cmd)
-    return filters.create(func)
-
-def arabic_cmd_any(cmds: list):
-    async def func(flt, client, message: Message):
-        if not message.text:
-            return False
-        return any(message.text.strip().startswith(c) for c in cmds)
-    return filters.create(func)
-
-
-# ── Promote ───────────────────────────────────────────────────────────────────
-
-@Client.on_message(arabic_cmd(CMD_PROMOTE) & filters.group)
-async def promote_user(client: Client, message: Message):
-    if not await is_admin(client, message.chat.id, message.from_user.id):
-        return await message.reply("❌ هذا الأمر للمشرفين فقط.")
-
-    user_id, first_name = await extract_user(client, message, message.text)
-    if not user_id:
-        return await message.reply("❗ يرجى تحديد المستخدم.")
-
-    try:
+@app.on_message(filters.regex(r'^رفع\s+@(\w+)') & filters.group)
+@is_admin
+async def promote_handler(client, message):
+    # Extract username from message
+    username = message.matches[0].group(1)
+    
+    # Get user info
+    user = await client.get_chat_member(message.chat.id, username)
+    
+    if user:
+        # Promote user
         await client.promote_chat_member(
-            message.chat.id,
-            user_id,
-            privileges={
-                "can_change_info": False,
-                "can_post_messages": True,
-                "can_edit_messages": False,
-                "can_delete_messages": True,
-                "can_restrict_members": True,
-                "can_invite_users": True,
-                "can_pin_messages": True,
-            }
-        )
-        await message.reply(
-            f"✅ تمت ترقية {mention(user_id, first_name or str(user_id))} إلى مشرف.",
-            parse_mode="markdown"
-        )
-    except UserAdminInvalid:
-        await message.reply("❌ لا يمكن ترقية هذا المستخدم.")
-    except ChatAdminRequired:
-        await message.reply("❌ البوت لا يملك صلاحيات كافية.")
-    except Exception as e:
-        await message.reply(f"❌ خطأ: {e}")
-
-
-# ── Demote ────────────────────────────────────────────────────────────────────
-
-@Client.on_message(arabic_cmd(CMD_DEMOTE) & filters.group)
-async def demote_user(client: Client, message: Message):
-    if not await is_admin(client, message.chat.id, message.from_user.id):
-        return await message.reply("❌ هذا الأمر للمشرفين فقط.")
-
-    user_id, first_name = await extract_user(client, message, message.text)
-    if not user_id:
-        return await message.reply("❗ يرجى تحديد المستخدم.")
-
-    try:
-        await client.promote_chat_member(
-            message.chat.id,
-            user_id,
-            privileges={
-                "can_change_info": False,
-                "can_post_messages": False,
-                "can_edit_messages": False,
-                "can_delete_messages": False,
-                "can_restrict_members": False,
-                "can_invite_users": False,
-                "can_pin_messages": False,
-            }
-        )
-        await message.reply(
-            f"✅ تم تنزيل {mention(user_id, first_name or str(user_id))} من الإدارة.",
-            parse_mode="markdown"
-        )
-    except Exception as e:
-        await message.reply(f"❌ خطأ: {e}")
-
-
-# ── Ban ───────────────────────────────────────────────────────────────────────
-
-@Client.on_message(arabic_cmd(CMD_BAN) & filters.group)
-async def ban_user(client: Client, message: Message):
-    if not await is_admin(client, message.chat.id, message.from_user.id):
-        return await message.reply("❌ هذا الأمر للمشرفين فقط.")
-
-    user_id, first_name = await extract_user(client, message, message.text)
-    if not user_id:
-        return await message.reply("❗ يرجى تحديد المستخدم.")
-
-    if user_id == message.from_user.id:
-        return await message.reply("⚠️ لا يمكنك حظر نفسك!")
-
-    try:
-        await client.ban_chat_member(message.chat.id, user_id)
-        await message.reply(
-            f"🚫 تم حظر {mention(user_id, first_name or str(user_id))}.",
-            parse_mode="markdown"
-        )
-    except UserAdminInvalid:
-        await message.reply("❌ لا يمكن حظر مشرف.")
-    except Exception as e:
-        await message.reply(f"❌ خطأ: {e}")
-
-
-# ── Unban ─────────────────────────────────────────────────────────────────────
-
-@Client.on_message(arabic_cmd(CMD_UNBAN) & filters.group)
-async def unban_user(client: Client, message: Message):
-    if not await is_admin(client, message.chat.id, message.from_user.id):
-        return await message.reply("❌ هذا الأمر للمشرفين فقط.")
-
-    user_id, first_name = await extract_user(client, message, message.text)
-    if not user_id:
-        return await message.reply("❗ يرجى تحديد المستخدم.")
-
-    try:
-        await client.unban_chat_member(message.chat.id, user_id)
-        await message.reply(
-            f"✅ تم رفع الحظر عن {mention(user_id, first_name or str(user_id))}.",
-            parse_mode="markdown"
-        )
-    except Exception as e:
-        await message.reply(f"❌ خطأ: {e}")
-
-
-# ── Mute ──────────────────────────────────────────────────────────────────────
-
-@Client.on_message(arabic_cmd(CMD_MUTE) & filters.group)
-async def mute_user(client: Client, message: Message):
-    if not await is_admin(client, message.chat.id, message.from_user.id):
-        return await message.reply("❌ هذا الأمر للمشرفين فقط.")
-
-    user_id, first_name = await extract_user(client, message, message.text)
-    if not user_id:
-        return await message.reply("❗ يرجى تحديد المستخدم.")
-
-    try:
-        await client.restrict_chat_member(
-            message.chat.id,
-            user_id,
-            ChatPermissions(
-                can_send_messages=False,
-                can_send_media_messages=False,
-                can_send_other_messages=False,
-                can_add_web_page_previews=False,
+            chat_id=message.chat.id,
+            user_id=user.user.id,
+            privileges=ChatPermissions(
+                can_change_info=True,
+                can_delete_messages=True,
+                can_restrict_members=True,
+                can_pin_messages=True,
+                can_promote_members=True,
+                can_manage_chat=True,
+                can_invite_users=True,
+                can_post_messages=True,
+                can_edit_messages=True
             )
         )
-        await message.reply(
-            f"🔇 تم كتم {mention(user_id, first_name or str(user_id))}.",
-            parse_mode="markdown"
-        )
-    except UserAdminInvalid:
-        await message.reply("❌ لا يمكن كتم مشرف.")
-    except Exception as e:
-        await message.reply(f"❌ خطأ: {e}")
+        
+        await message.reply(f"✅ تم رفع @{username} إلى رتبة أعلى بنجاح!")
+    else:
+        await message.reply("⚠️ لم يتم العثور على المستخدم!")
 
-
-# ── Unmute ────────────────────────────────────────────────────────────────────
-
-@Client.on_message(arabic_cmd(CMD_UNMUTE) & filters.group)
-async def unmute_user(client: Client, message: Message):
-    if not await is_admin(client, message.chat.id, message.from_user.id):
-        return await message.reply("❌ هذا الأمر للمشرفين فقط.")
-
-    user_id, first_name = await extract_user(client, message, message.text)
-    if not user_id:
-        return await message.reply("❗ يرجى تحديد المستخدم.")
-
-    try:
+@app.on_message(filters.regex(r'^تنزيل\s+@(\w+)') & filters.group)
+@is_admin
+async def demote_handler(client, message):
+    # Similar logic for demote
+    username = message.matches[0].group(1)
+    
+    user = await client.get_chat_member(message.chat.id, username)
+    
+    if user:
+        # Demote user
         await client.restrict_chat_member(
-            message.chat.id,
-            user_id,
-            ChatPermissions(
+            chat_id=message.chat.id,
+            user_id=user.user.id,
+            permissions=ChatPermissions(
                 can_send_messages=True,
                 can_send_media_messages=True,
-                can_send_other_messages=True,
-                can_add_web_page_previews=True,
+                can_send_polls=True,
+                can_change_info=False,
+                can_invite_users=False,
+                can_pin_messages=False
             )
         )
-        await message.reply(
-            f"🔊 تم إلغاء كتم {mention(user_id, first_name or str(user_id))}.",
-            parse_mode="markdown"
+        
+        await message.reply(f"✅ تم تنزيل @{username} من رتبته بنجاح!")
+
+@app.on_message(filters.regex(r'^حظر\s+@(\w+)') & filters.group)
+@is_admin
+async def ban_handler(client, message):
+    username = message.matches[0].group(1)
+    
+    user = await client.get_chat_member(message.chat.id, username)
+    
+    if user:
+        await client.ban_chat_member(message.chat.id, user.user.id)
+        await message.reply(f"✅ تم حظر @{username} بنجاح!")
+
+@app.on_message(filters.regex(r'^الغاء\s+الحظر\s+@(\w+)') & filters.group)
+@is_admin
+async def unban_handler(client, message):
+    username = message.matches[0].group(1)
+    
+    user = await client.get_chat_member(message.chat.id, username)
+    
+    if user:
+        await client.unban_chat_member(message.chat.id, user.user.id)
+        await message.reply(f"✅ تم إلغاء حظر @{username} بنجاح!")
+
+@app.on_message(filters.regex(r'^كتم\s+@(\w+)') & filters.group)
+@is_admin
+async def mute_handler(client, message):
+    username = message.matches[0].group(1)
+    
+    user = await client.get_chat_member(message.chat.id, username)
+    
+    if user:
+        await client.restrict_chat_member(
+            chat_id=message.chat.id,
+            user_id=user.user.id,
+            permissions=ChatPermissions(
+                can_send_messages=False
+            )
         )
-    except Exception as e:
-        await message.reply(f"❌ خطأ: {e}")
+        await message.reply(f"✅ تم كتم @{username} بنجاح!")
 
-
-# ── Kick ──────────────────────────────────────────────────────────────────────
-
-@Client.on_message(arabic_cmd(CMD_KICK) & filters.group)
-async def kick_user(client: Client, message: Message):
-    if not await is_admin(client, message.chat.id, message.from_user.id):
-        return await message.reply("❌ هذا الأمر للمشرفين فقط.")
-
-    user_id, first_name = await extract_user(client, message, message.text)
-    if not user_id:
-        return await message.reply("❗ يرجى تحديد المستخدم.")
-
-    try:
-        await client.ban_chat_member(message.chat.id, user_id)
-        await asyncio.sleep(1)
-        await client.unban_chat_member(message.chat.id, user_id)
-        await message.reply(
-            f"👋 تم طرد {mention(user_id, first_name or str(user_id))} من المجموعة.",
-            parse_mode="markdown"
+@app.on_message(filters.regex(r'^الغاء\s+الكتم\s+@(\w+)') & filters.group)
+@is_admin
+async def unmute_handler(client, message):
+    username = message.matches[0].group(1)
+    
+    user = await client.get_chat_member(message.chat.id, username)
+    
+    if user:
+        await client.restrict_chat_member(
+            chat_id=message.chat.id,
+            user_id=user.user.id,
+            permissions=ChatPermissions(
+                can_send_messages=True
+            )
         )
-    except UserAdminInvalid:
-        await message.reply("❌ لا يمكن طرد مشرف.")
-    except Exception as e:
-        await message.reply(f"❌ خطأ: {e}")
+        await message.reply(f"✅ تم إلغاء كتم @{username} بنجاح!")
 
-
-# ── Admin List ────────────────────────────────────────────────────────────────
-
-@Client.on_message(arabic_cmd_any(CMD_ADMIN_LIST) & filters.group)
-async def admin_list(client: Client, message: Message):
-    try:
-        admins = []
-        async for member in client.get_chat_members(
-            message.chat.id, filter="administrators"
-        ):
-            if not member.user.is_bot:
-                name = member.user.first_name
-                user_id = member.user.id
-                status = "👑" if member.status == ChatMemberStatus.OWNER else "⭐"
-                admins.append(f"{status} {mention(user_id, name)}")
-
-        if not admins:
-            return await message.reply("لا يوجد مشرفون.")
-
-        text = "**📋 قائمة المشرفين:**\n\n" + "\n".join(admins)
-        await message.reply(text, parse_mode="markdown")
-    except Exception as e:
-        await message.reply(f"❌ خطأ: {e}")
+@app.on_message(filters.regex(r'^طرد\s+@(\w+)') & filters.group)
+@is_admin
+async def kick_handler(client, message):
+    username = message.matches[0].group(1)
+    
+    user = await client.get_chat_member(message.chat.id, username)
+    
+    if user:
+        await client.ban_chat_member(message.chat.id, user.user.id)
+        await message.reply(f"✅ تم طرد @{username} بنجاح!")
+        
+        # Unban after kick (so they can rejoin)
+        await client.unban_chat_member(message.chat.id, user.user.id)
