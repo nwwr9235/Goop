@@ -1,4 +1,4 @@
-# main.py - النسخة المعدلة مع صورة البروفايل
+# main.py - النسخة المعدلة (ايدي في المجموعات فقط، تعطيل معلومات المجموعة)
 
 import logging
 import os
@@ -390,7 +390,7 @@ async def auto_reply_handler(client, message):
         'انذار', 'عرض انذارات', 'مسح انذارات',
         'اضافة رد', 'حذف رد', 'عرض الردود',
         'تفعيل الترحيب', 'تعطيل الترحيب', 'تعيين رسالة الترحيب',
-        'قفل', 'فتح', 'ايدي', 'معلوماتي', 'معلومات المجموعة'
+        'قفل', 'فتح', 'ايدي', 'معلوماتي'
     ]
     
     for cmd in admin_commands:
@@ -408,10 +408,10 @@ async def auto_reply_handler(client, message):
             return
 
 # ============================================================
-# أمر ايدي المعدل - مع صورة البروفايل
+# أمر ايدي المعدل - يعمل في المجموعات فقط + صورة البروفايل
 # ============================================================
 
-@app.on_message(filters.regex(r'^ايدي$') | filters.command("id"))
+@app.on_message((filters.regex(r'^ايدي$') | filters.command("id")) & filters.group)
 async def id_handler(client, message):
     # تحديد المستخدم (الشخص نفسه أو من الرد)
     target = message.from_user
@@ -436,8 +436,7 @@ async def id_handler(client, message):
 🆔 **الايدي:** `{target.id}`
 📛 **الاسم:** {target.first_name}
 🔖 **المعرف:** @{target.username if target.username else 'لا يوجد'}
-📅 **تاريخ الانضمام:** {target.join_date if hasattr(target, 'join_date') else 'غير متوفر'}
-🤖 **نوع الحساب:** {'بوت' if target.is_bot else 'مستخدم'}
+🤖 **نوع الحساب:** {'بوت 🤖' if target.is_bot else 'مستخدم 👤'}
 💬 **الحالة:** {target.status if hasattr(target, 'status') else 'غير معروف'}
 
 📊 **معلومات المجموعة:**
@@ -463,7 +462,7 @@ async def id_handler(client, message):
 # أمر معلوماتي المعدل - مع صورة البروفايل
 # ============================================================
 
-@app.on_message(filters.regex(r'^معلوماتي$'))
+@app.on_message(filters.regex(r'^معلوماتي$') & filters.group)
 async def my_info_handler(client, message):
     user = message.from_user
     
@@ -487,7 +486,7 @@ async def my_info_handler(client, message):
 📛 **الاسم:** {user.first_name}
 📧 **المعرف:** @{user.username if user.username else 'لا يوجد'}
 📊 **الحالة في المجموعة:** {status}
-🤖 **نوع الحساب:** {'بوت' if user.is_bot else 'مستخدم'}
+🤖 **نوع الحساب:** {'بوت 🤖' if user.is_bot else 'مستخدم 👤'}
     """
     
     # إرسال الصورة مع النص إذا وجدت
@@ -503,46 +502,12 @@ async def my_info_handler(client, message):
     await message.reply(text, quote=True)
 
 # ============================================================
-# أمر معلومات المجموعة المعدل
+# ❌ تم تعطيل أمر معلومات المجموعة (محذوف)
 # ============================================================
 
-@app.on_message(filters.regex(r'^معلومات المجموعة$') | filters.regex(r'^معلومات المجموعه$'))
-async def group_info_handler(client, message):
-    chat = message.chat
-    
-    try:
-        count = await client.get_chat_members_count(chat.id)
-    except:
-        count = "غير معروف"
-    
-    # الحصول على صورة المجموعة إذا وجدت
-    chat_photo = None
-    if chat.photo:
-        try:
-            chat_photo = chat.photo.big_file_id
-        except:
-            pass
-    
-    text = f"""
-📊 **معلومات المجموعة:**
-
-🆔 **الايدي:** `{chat.id}`
-📛 **الاسم:** {chat.title}
-👥 **عدد الأعضاء:** {count}
-📋 **الوصف:** {chat.description if chat.description else 'لا يوجد وصف'}
-🔗 **الرابط:** {chat.invite_link if chat.invite_link else 'غير متوفر'}
-🔒 **نوع المجموعة:** {chat.type}
-    """
-    
-    # إرسال الصورة مع النص إذا وجدت
-    if chat_photo:
-        await message.reply_photo(
-            photo=chat_photo,
-            caption=text,
-            quote=True
-        )
-    else:
-        await message.reply(text, quote=True)
+# @app.on_message(filters.regex(r'^معلومات المجموعة$') | filters.regex(r'^معلومات المجموعه$'))
+# async def group_info_handler(client, message):
+#     ... (محذوف)
 
 # ============================================================
 # نظام الترحيب
@@ -652,7 +617,7 @@ async def unlock_handler(client, message):
     await message.reply(f"🔓 تم فتح {lock_type}")
 
 # ============================================================
-# المساعدة المعدلة
+# المساعدة المعدلة (بدون معلومات المجموعة)
 # ============================================================
 
 @app.on_message(filters.regex(r'^مساعدة$') | filters.regex(r'^الاوامر$') | filters.command(["start", "help"]))
@@ -690,13 +655,12 @@ async def help_handler(client, message):
 `تعطيل الترحيب` - تعطيل رسالة الترحيب
 `تعيين رسالة الترحيب [نص]` - تعيين رسالة الترحيب
 
-**📋 المعلومات:**
+**📋 المعلومات (في المجموعات فقط):**
 `ايدي` - معلوماتك + صورة البروفايل
 `ايدي` (بالرد) - معلومات الشخص + صورته
 `معلوماتي` - تفاصيلك + صورة البروفايل
-`معلومات المجموعة` - معلومات المجموعة + صورتها
 
-**ملاحظة:** جميع أوامر الإدارة تعمل بالرد على رسالة المستخدم فقط!
+**ملاحظة:** جميع الأوامر تعمل في المجموعات فقط!
     """
     
     await message.reply(help_text, disable_web_page_preview=True)
