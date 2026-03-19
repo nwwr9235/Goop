@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.10-slim
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -18,8 +18,6 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt \
     && pip install --no-cache-dir py-tgcalls
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy bot source
 COPY . .
