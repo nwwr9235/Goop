@@ -1,4 +1,4 @@
-# main.py - الإصلاح النهائي
+# main.py - النسخة المعدلة (جميع الأوامر بالرد فقط)
 
 import logging
 import os
@@ -46,69 +46,32 @@ async def is_admin(client, chat_id, user_id):
     except:
         return False
 
-async def get_target_user(client, message):
-    """استخراج المستخدم المستهدف - الإصلاح النهائي"""
-    target = None
-    
-    # الطريقة 1: الرد على رسالة
+async def get_target_from_reply(message):
+    """استخراج المستخدم من الرد على الرسالة فقط"""
     if message.reply_to_message and message.reply_to_message.from_user:
         target = message.reply_to_message.from_user
         logger.info(f"Target from reply: {target.id} - {target.first_name}")
         return target
     
-    # الطريقة 2: المنشن @username
-    text = message.text or message.caption or ""
-    
-    # البحث عن @username
-    match = re.search(r'@(\w+)', text)
-    if match:
-        username = match.group(1)
-        try:
-            # محاولة الحصول على المستخدم بالمعرف
-            member = await client.get_chat_member(message.chat.id, username)
-            target = member.user
-            logger.info(f"Target from @username: {target.id} - {target.first_name}")
-            return target
-        except Exception as e:
-            logger.error(f"Error getting user by username @{username}: {e}")
-    
-    # الطريقة 3: البحث عن ID رقمي
-    match_id = re.search(r'(\d+)', text)
-    if match_id:
-        try:
-            user_id = int(match_id.group(1))
-            member = await client.get_chat_member(message.chat.id, user_id)
-            target = member.user
-            logger.info(f"Target from ID: {target.id} - {target.first_name}")
-            return target
-        except:
-            pass
-    
-    logger.warning("No target user found")
+    logger.warning("No reply found")
     return None
 
 # ============================================================
-# رفع مشرف - الإصلاح الكامل
+# رفع مشرف - يعمل بالرد فقط
 # ============================================================
 
-@app.on_message(filters.regex(r'رفع') & filters.group)
+@app.on_message(filters.regex(r'^رفع مشرف$') & filters.group)
 async def promote_handler(client, message):
-    logger.info(f"Promote command from {message.from_user.id}: {message.text}")
+    logger.info(f"Promote command from {message.from_user.id}")
     
     if not await is_admin(client, message.chat.id, message.from_user.id):
         return await message.reply("⚠️ يجب أن تكون مشرفاً!")
     
-    target = await get_target_user(client, message)
+    target = await get_target_from_reply(message)
     
     if not target:
-        return await message.reply("""⚠️ لم أجد المستخدم!
-
-الطرق المتاحة:
-1️⃣ رد على رسالة المستخدم ثم اكتب: رفع
-2️⃣ اكتب: رفع @username
-3️⃣ اكتب: رفع 123456789 (ايدي المستخدم)""")
+        return await message.reply("⚠️ عليك الرد على رسالة المستخدم الذي تريد رفعه!")
     
-    # التحقق من أن المستخدم ليس بوت
     if target.is_bot:
         return await message.reply("❌ لا يمكن رفع البوتات!")
     
@@ -138,23 +101,23 @@ async def promote_handler(client, message):
     except ChatAdminRequired:
         await message.reply("❌ البوت يحتاج صلاحية رفع المشرفين!")
     except UserAdminInvalid:
-        await message.reply("❌ لا يمكن رفع هذا المستخدم (قد يكون مشرفاً أعلى منك)!")
+        await message.reply("❌ لا يمكن رفع هذا المستخدم!")
     except Exception as e:
         logger.error(f"Promote error: {e}")
         await message.reply(f"❌ فشل الرفع: {str(e)}")
 
 # ============================================================
-# تنزيل مشرف
+# تنزيل مشرف - يعمل بالرد فقط
 # ============================================================
 
-@app.on_message(filters.regex(r'تنزيل') & filters.group)
+@app.on_message(filters.regex(r'^تنزيل مشرف$') & filters.group)
 async def demote_handler(client, message):
     if not await is_admin(client, message.chat.id, message.from_user.id):
         return await message.reply("⚠️ يجب أن تكون مشرفاً!")
     
-    target = await get_target_user(client, message)
+    target = await get_target_from_reply(message)
     if not target:
-        return await message.reply("⚠️ استخدم: تنزيل @username أو رد على رسالة المستخدم")
+        return await message.reply("⚠️ عليك الرد على رسالة المستخدم الذي تريد تنزيله!")
     
     try:
         await client.promote_chat_member(
@@ -167,27 +130,27 @@ async def demote_handler(client, message):
                 can_restrict_members=False,
                 can_promote_members=False,
                 can_change_info=False,
-                can_invite_users=True,
+                can_invite_users=False,
                 can_pin_messages=False,
                 is_anonymous=False
             )
         )
-        await message.reply(f"✅ تم تنزيل [{target.first_name}](tg://user?id={target.id})!")
+        await message.reply(f"✅ تم تنزيل [{target.first_name}](tg://user?id={target.id}) من المشرفين!")
     except Exception as e:
         await message.reply(f"❌ فشل التنزيل: {str(e)}")
 
 # ============================================================
-# حظر
+# حظر - يعمل بالرد فقط
 # ============================================================
 
-@app.on_message(filters.regex(r'حظر') & filters.group)
+@app.on_message(filters.regex(r'^حظر$') & filters.group)
 async def ban_handler(client, message):
     if not await is_admin(client, message.chat.id, message.from_user.id):
         return await message.reply("⚠️ يجب أن تكون مشرفاً!")
     
-    target = await get_target_user(client, message)
+    target = await get_target_from_reply(message)
     if not target:
-        return await message.reply("⚠️ استخدم: حظر @username أو رد على رسالة المستخدم")
+        return await message.reply("⚠️ عليك الرد على رسالة المستخدم الذي تريد حظره!")
     
     try:
         await client.ban_chat_member(message.chat.id, target.id)
@@ -196,17 +159,17 @@ async def ban_handler(client, message):
         await message.reply(f"❌ فشل الحظر: {str(e)}")
 
 # ============================================================
-# إلغاء حظر
+# إلغاء حظر - يعمل بالرد فقط
 # ============================================================
 
-@app.on_message(filters.regex(r'الغاء حظر') & filters.group)
+@app.on_message(filters.regex(r'^الغاء حظر$') & filters.group)
 async def unban_handler(client, message):
     if not await is_admin(client, message.chat.id, message.from_user.id):
         return await message.reply("⚠️ يجب أن تكون مشرفاً!")
     
-    target = await get_target_user(client, message)
+    target = await get_target_from_reply(message)
     if not target:
-        return await message.reply("⚠️ استخدم: الغاء حظر @username")
+        return await message.reply("⚠️ عليك الرد على رسالة المستخدم الذي تريد إلغاء حظره!")
     
     try:
         await client.unban_chat_member(message.chat.id, target.id)
@@ -215,17 +178,17 @@ async def unban_handler(client, message):
         await message.reply(f"❌ فشل إلغاء الحظر: {str(e)}")
 
 # ============================================================
-# كتم
+# كتم - يعمل بالرد فقط
 # ============================================================
 
-@app.on_message(filters.regex(r'كتم') & filters.group)
+@app.on_message(filters.regex(r'^كتم$') & filters.group)
 async def mute_handler(client, message):
     if not await is_admin(client, message.chat.id, message.from_user.id):
         return await message.reply("⚠️ يجب أن تكون مشرفاً!")
     
-    target = await get_target_user(client, message)
+    target = await get_target_from_reply(message)
     if not target:
-        return await message.reply("⚠️ استخدم: كتم @username أو رد على رسالة المستخدم")
+        return await message.reply("⚠️ عليك الرد على رسالة المستخدم الذي تريد كتمه!")
     
     try:
         await client.restrict_chat_member(
@@ -247,17 +210,17 @@ async def mute_handler(client, message):
         await message.reply(f"❌ فشل الكتم: {str(e)}")
 
 # ============================================================
-# إلغاء كتم
+# إلغاء كتم - يعمل بالرد فقط
 # ============================================================
 
-@app.on_message(filters.regex(r'الغاء كتم') & filters.group)
+@app.on_message(filters.regex(r'^الغاء كتم$') & filters.group)
 async def unmute_handler(client, message):
     if not await is_admin(client, message.chat.id, message.from_user.id):
         return await message.reply("⚠️ يجب أن تكون مشرفاً!")
     
-    target = await get_target_user(client, message)
+    target = await get_target_from_reply(message)
     if not target:
-        return await message.reply("⚠️ استخدم: الغاء كتم @username")
+        return await message.reply("⚠️ عليك الرد على رسالة المستخدم الذي تريد إلغاء كتمه!")
     
     try:
         await client.restrict_chat_member(
@@ -279,17 +242,17 @@ async def unmute_handler(client, message):
         await message.reply(f"❌ فشل إلغاء الكتم: {str(e)}")
 
 # ============================================================
-# طرد
+# طرد - يعمل بالرد فقط
 # ============================================================
 
-@app.on_message(filters.regex(r'طرد') & filters.group)
+@app.on_message(filters.regex(r'^طرد$') & filters.group)
 async def kick_handler(client, message):
     if not await is_admin(client, message.chat.id, message.from_user.id):
         return await message.reply("⚠️ يجب أن تكون مشرفاً!")
     
-    target = await get_target_user(client, message)
+    target = await get_target_from_reply(message)
     if not target:
-        return await message.reply("⚠️ استخدم: طرد @username أو رد على رسالة المستخدم")
+        return await message.reply("⚠️ عليك الرد على رسالة المستخدم الذي تريد طرده!")
     
     try:
         await client.ban_chat_member(message.chat.id, target.id)
@@ -300,17 +263,17 @@ async def kick_handler(client, message):
         await message.reply(f"❌ فشل الطرد: {str(e)}")
 
 # ============================================================
-# نظام الإنذارات
+# نظام الإنذارات - يعمل بالرد فقط
 # ============================================================
 
-@app.on_message(filters.regex(r'انذار') & filters.group)
+@app.on_message(filters.regex(r'^انذار$') & filters.group)
 async def warn_handler(client, message):
     if not await is_admin(client, message.chat.id, message.from_user.id):
         return await message.reply("⚠️ يجب أن تكون مشرفاً!")
     
-    target = await get_target_user(client, message)
+    target = await get_target_from_reply(message)
     if not target:
-        return await message.reply("⚠️ استخدم: انذار @username أو رد على رسالة المستخدم")
+        return await message.reply("⚠️ عليك الرد على رسالة المستخدم الذي تريد إنذاره!")
     
     chat_id = message.chat.id
     user_id = target.id
@@ -334,9 +297,9 @@ async def warn_handler(client, message):
     else:
         await message.reply(f"⚠️ إنذار {count}/3 للمستخدم [{target.first_name}](tg://user?id={user_id})")
 
-@app.on_message(filters.regex(r'عرض انذارات') & filters.group)
+@app.on_message(filters.regex(r'^عرض انذارات$') & filters.group)
 async def show_warnings_handler(client, message):
-    target = await get_target_user(client, message)
+    target = await get_target_from_reply(message)
     if not target:
         target = message.from_user
     
@@ -346,14 +309,14 @@ async def show_warnings_handler(client, message):
     count = warnings_db.get(chat_id, {}).get(user_id, 0)
     await message.reply(f"📋 إنذارات [{target.first_name}](tg://user?id={user_id}): {count}/3")
 
-@app.on_message(filters.regex(r'مسح انذارات') & filters.group)
+@app.on_message(filters.regex(r'^مسح انذارات$') & filters.group)
 async def clear_warnings_handler(client, message):
     if not await is_admin(client, message.chat.id, message.from_user.id):
         return await message.reply("⚠️ يجب أن تكون مشرفاً!")
     
-    target = await get_target_user(client, message)
+    target = await get_target_from_reply(message)
     if not target:
-        return await message.reply("⚠️ استخدم: مسح انذارات @username")
+        return await message.reply("⚠️ عليك الرد على رسالة المستخدم الذي تريد مسح إنذاراته!")
     
     chat_id = message.chat.id
     user_id = target.id
@@ -364,10 +327,10 @@ async def clear_warnings_handler(client, message):
     await message.reply(f"✅ تم مسح إنذارات [{target.first_name}](tg://user?id={user_id})")
 
 # ============================================================
-# نظام الردود التلقائية
+# نظام الردود التلقائية (كما هي)
 # ============================================================
 
-@app.on_message(filters.regex(r'اضافة رد\s+(.+?)\s*=\s*(.+)') & filters.group)
+@app.on_message(filters.regex(r'^اضافة رد\s+(.+?)\s*=\s*(.+)') & filters.group)
 async def add_reply_handler(client, message):
     if not await is_admin(client, message.chat.id, message.from_user.id):
         return await message.reply("⚠️ يجب أن تكون مشرفاً!")
@@ -387,7 +350,7 @@ async def add_reply_handler(client, message):
     
     await message.reply(f"✅ تم إضافة رد:\nكلمة: `{trigger}`\nرد: {response}")
 
-@app.on_message(filters.regex(r'حذف رد\s+(.+)') & filters.group)
+@app.on_message(filters.regex(r'^حذف رد\s+(.+)') & filters.group)
 async def delete_reply_handler(client, message):
     if not await is_admin(client, message.chat.id, message.from_user.id):
         return await message.reply("⚠️ يجب أن تكون مشرفاً!")
@@ -402,7 +365,7 @@ async def delete_reply_handler(client, message):
     else:
         await message.reply(f"❌ الرد `{trigger}` غير موجود")
 
-@app.on_message(filters.regex(r'عرض الردود') & filters.group)
+@app.on_message(filters.regex(r'^عرض الردود') & filters.group)
 async def show_replies_handler(client, message):
     chat_id = message.chat.id
     
@@ -423,7 +386,8 @@ async def auto_reply_handler(client, message):
     
     # تجنب الرد على أوامر الإدارة
     admin_commands = [
-        'رفع', 'تنزيل', 'حظر', 'الغاء حظر', 'كتم', 'الغاء كتم', 'طرد',
+        'رفع مشرف', 'تنزيل مشرف', 'حظر', 'الغاء حظر', 
+        'كتم', 'الغاء كتم', 'طرد',
         'انذار', 'عرض انذارات', 'مسح انذارات',
         'اضافة رد', 'حذف رد', 'عرض الردود',
         'تفعيل الترحيب', 'تعطيل الترحيب', 'تعيين رسالة الترحيب',
@@ -445,10 +409,9 @@ async def auto_reply_handler(client, message):
             return
 
 # ============================================================
-# أوامر المعلومات - الإصلاح هنا
+# أوامر المعلومات (كما هي)
 # ============================================================
 
-# ✅ إصلاح أمر ايدي - بدون $ في regex
 @app.on_message(filters.regex(r'ايدي') | filters.command("id"))
 async def id_handler(client, message):
     user = message.from_user
@@ -507,7 +470,7 @@ async def group_info_handler(client, message):
     await message.reply(text)
 
 # ============================================================
-# نظام الترحيب
+# نظام الترحيب (كما هو)
 # ============================================================
 
 @app.on_message(filters.new_chat_members & filters.group)
@@ -566,7 +529,7 @@ async def set_welcome_handler(client, message):
     await message.reply(f"✅ تم تعيين رسالة الترحيب:\n{welcome_msg}")
 
 # ============================================================
-# نظام الحماية
+# نظام الحماية (كما هو)
 # ============================================================
 
 LOCK_TYPES = {
@@ -614,7 +577,7 @@ async def unlock_handler(client, message):
     await message.reply(f"🔓 تم فتح {lock_type}")
 
 # ============================================================
-# المساعدة
+# المساعدة المعدلة
 # ============================================================
 
 @app.on_message(filters.regex(r'مساعدة') | filters.regex(r'الاوامر') | filters.command(["start", "help"]))
@@ -622,41 +585,42 @@ async def help_handler(client, message):
     help_text = """
 🤖 **أوامر البوت:**
 
-**👮‍♂️ الإدارة:**
-`رفع` - رد على رسالة المستخدم ثم اكتب رفع
-`رفع @username` - رفع بالمعرف
-`تنزيل @user` - تنزيل المستخدم
-`حظر @user` - حظر المستخدم
-`الغاء حظر @user` - إلغاء الحظر
-`كتم @user` - كتم المستخدم
-`الغاء كتم @user` - إلغاء الكتم
-`طرد @user` - طرد المستخدم
+**👮‍♂️ الإدارة (بالرد على رسالة المستخدم):**
+`رفع مشرف` - رفع المستخدم إلى مشرف
+`تنزيل مشرف` - تنزيل المستخدم من المشرفين
+`حظر` - حظر المستخدم
+`الغاء حظر` - إلغاء حظر المستخدم
+`كتم` - كتم المستخدم
+`الغاء كتم` - إلغاء كتم المستخدم
+`طرد` - طرد المستخدم
 
-**⚠️ الإنذارات:**
-`انذار @user` - إنذار المستخدم (3 = حظر)
-`عرض انذارات @user` - عرض الإنذارات
-`مسح انذارات @user` - مسح الإنذارات
+**⚠️ الإنذارات (بالرد):**
+`انذار` - إنذار المستخدم (3 = حظر تلقائي)
+`عرض انذارات` - عرض إنذارات المستخدم
+`مسح انذارات` - مسح إنذارات المستخدم
 
 **🔒 الحماية:**
-`قفل الروابط` - منع الروابط
+`قفل الروابط` - منع إرسال الروابط
 `فتح الروابط` - السماح بالروابط
 `قفل التكرار` - منع التكرار
 `فتح التكرار` - السماح بالتكرار
 
 **💬 الردود التلقائية:**
-`اضافة رد كلمة = الرد` - إضافة رد
-`حذف رد كلمة` - حذف رد
+`اضافة رد كلمة = الرد` - إضافة رد تلقائي
+`حذف رد كلمة` - حذف رد تلقائي
 `عرض الردود` - عرض جميع الردود
 
 **👋 الترحيب:**
 `تفعيل الترحيب` - تفعيل رسالة الترحيب
 `تعطيل الترحيب` - تعطيل رسالة الترحيب
-`تعيين رسالة الترحيب مرحباً {user}` - تعيين الرسالة
+`تعيين رسالة الترحيب [نص]` - تعيين رسالة الترحيب
 
 **📋 المعلومات:**
-`ايدي` - معلوماتك
-`معلوماتي` - تفاصيلك
+`ايدي` - معلوماتك الشخصية
+`معلوماتي` - تفاصيل حسابك
 `معلومات المجموعة` - معلومات المجموعة
+
+**ملاحظة:** جميع أوامر الإدارة تعمل بالرد على رسالة المستخدم فقط!
     """
     
     await message.reply(help_text, disable_web_page_preview=True)
@@ -668,4 +632,3 @@ async def help_handler(client, message):
 if __name__ == "__main__":
     logger.info("🚀 جاري تشغيل البوت...")
     app.run()
-
