@@ -1,4 +1,4 @@
-# main.py - النسخة المعدلة (جميع الأوامر بالرد فقط)
+# main.py - النسخة المعدلة مع صورة البروفايل
 
 import logging
 import os
@@ -327,7 +327,7 @@ async def clear_warnings_handler(client, message):
     await message.reply(f"✅ تم مسح إنذارات [{target.first_name}](tg://user?id={user_id})")
 
 # ============================================================
-# نظام الردود التلقائية (كما هي)
+# نظام الردود التلقائية
 # ============================================================
 
 @app.on_message(filters.regex(r'^اضافة رد\s+(.+?)\s*=\s*(.+)') & filters.group)
@@ -384,7 +384,6 @@ async def auto_reply_handler(client, message):
     if not message.text:
         return
     
-    # تجنب الرد على أوامر الإدارة
     admin_commands = [
         'رفع مشرف', 'تنزيل مشرف', 'حظر', 'الغاء حظر', 
         'كتم', 'الغاء كتم', 'طرد',
@@ -409,30 +408,71 @@ async def auto_reply_handler(client, message):
             return
 
 # ============================================================
-# أوامر المعلومات (كما هي)
+# أمر ايدي المعدل - مع صورة البروفايل
 # ============================================================
 
-@app.on_message(filters.regex(r'ايدي') | filters.command("id"))
+@app.on_message(filters.regex(r'^ايدي$') | filters.command("id"))
 async def id_handler(client, message):
-    user = message.from_user
+    # تحديد المستخدم (الشخص نفسه أو من الرد)
+    target = message.from_user
+    
+    # إذا كان هناك رد، أظهر معلومات الشخص المردود عليه
+    if message.reply_to_message and message.reply_to_message.from_user:
+        target = message.reply_to_message.from_user
+    
     chat = message.chat
     
+    # الحصول على صورة البروفايل
+    photos = []
+    try:
+        photos = await client.get_chat_photos(target.id, limit=1)
+    except Exception as e:
+        logger.error(f"Error getting profile photos: {e}")
+    
+    # بناء نص المعلومات
     text = f"""
-📋 معلوماتك:
-🆔 ايديك: `{user.id}`
-👤 الاسم: {user.first_name}
-🔖 المعرف: @{user.username if user.username else 'لا يوجد'}
+👤 **معلومات المستخدم:**
 
-📋 معلومات المجموعة:
-🆔 ايدي المجموعة: `{chat.id}`
-📛 اسم المجموعة: {chat.title}
+🆔 **الايدي:** `{target.id}`
+📛 **الاسم:** {target.first_name}
+🔖 **المعرف:** @{target.username if target.username else 'لا يوجد'}
+📅 **تاريخ الانضمام:** {target.join_date if hasattr(target, 'join_date') else 'غير متوفر'}
+🤖 **نوع الحساب:** {'بوت' if target.is_bot else 'مستخدم'}
+💬 **الحالة:** {target.status if hasattr(target, 'status') else 'غير معروف'}
+
+📊 **معلومات المجموعة:**
+🆔 **ايدي المجموعة:** `{chat.id}`
+📛 **اسم المجموعة:** {chat.title}
+👥 **عدد الأعضاء:** {await client.get_chat_members_count(chat.id) if chat.type != 'private' else 'N/A'}
     """
     
-    await message.reply(text)
+    # إرسال الصورة مع النص إذا وجدت
+    if photos:
+        async for photo in photos:
+            await message.reply_photo(
+                photo=photo.file_id,
+                caption=text,
+                quote=True
+            )
+            return
+    
+    # إذا لم توجد صورة، إرسال النص فقط
+    await message.reply(text, quote=True)
 
-@app.on_message(filters.regex(r'معلوماتي'))
+# ============================================================
+# أمر معلوماتي المعدل - مع صورة البروفايل
+# ============================================================
+
+@app.on_message(filters.regex(r'^معلوماتي$'))
 async def my_info_handler(client, message):
     user = message.from_user
+    
+    # الحصول على صورة البروفايل
+    photos = []
+    try:
+        photos = await client.get_chat_photos(user.id, limit=1)
+    except Exception as e:
+        logger.error(f"Error getting profile photos: {e}")
     
     try:
         member = await client.get_chat_member(message.chat.id, user.id)
@@ -441,16 +481,32 @@ async def my_info_handler(client, message):
         status = "غير معروف"
     
     text = f"""
-👤 معلوماتك الشخصية:
-🆔 الايدي: `{user.id}`
-📛 الاسم: {user.first_name}
-📧 المعرف: @{user.username if user.username else 'لا يوجد'}
-📊 الحالة في المجموعة: {status}
+👤 **معلوماتك الشخصية:**
+
+🆔 **الايدي:** `{user.id}`
+📛 **الاسم:** {user.first_name}
+📧 **المعرف:** @{user.username if user.username else 'لا يوجد'}
+📊 **الحالة في المجموعة:** {status}
+🤖 **نوع الحساب:** {'بوت' if user.is_bot else 'مستخدم'}
     """
     
-    await message.reply(text)
+    # إرسال الصورة مع النص إذا وجدت
+    if photos:
+        async for photo in photos:
+            await message.reply_photo(
+                photo=photo.file_id,
+                caption=text,
+                quote=True
+            )
+            return
+    
+    await message.reply(text, quote=True)
 
-@app.on_message(filters.regex(r'معلومات المجموعة') | filters.regex(r'معلومات المجموعه'))
+# ============================================================
+# أمر معلومات المجموعة المعدل
+# ============================================================
+
+@app.on_message(filters.regex(r'^معلومات المجموعة$') | filters.regex(r'^معلومات المجموعه$'))
 async def group_info_handler(client, message):
     chat = message.chat
     
@@ -459,18 +515,37 @@ async def group_info_handler(client, message):
     except:
         count = "غير معروف"
     
+    # الحصول على صورة المجموعة إذا وجدت
+    chat_photo = None
+    if chat.photo:
+        try:
+            chat_photo = chat.photo.big_file_id
+        except:
+            pass
+    
     text = f"""
-📊 معلومات المجموعة:
-🆔 الايدي: `{chat.id}`
-📛 الاسم: {chat.title}
-👥 عدد الأعضاء: {count}
-🔗 الرابط: {chat.invite_link if chat.invite_link else 'غير متوفر'}
+📊 **معلومات المجموعة:**
+
+🆔 **الايدي:** `{chat.id}`
+📛 **الاسم:** {chat.title}
+👥 **عدد الأعضاء:** {count}
+📋 **الوصف:** {chat.description if chat.description else 'لا يوجد وصف'}
+🔗 **الرابط:** {chat.invite_link if chat.invite_link else 'غير متوفر'}
+🔒 **نوع المجموعة:** {chat.type}
     """
     
-    await message.reply(text)
+    # إرسال الصورة مع النص إذا وجدت
+    if chat_photo:
+        await message.reply_photo(
+            photo=chat_photo,
+            caption=text,
+            quote=True
+        )
+    else:
+        await message.reply(text, quote=True)
 
 # ============================================================
-# نظام الترحيب (كما هو)
+# نظام الترحيب
 # ============================================================
 
 @app.on_message(filters.new_chat_members & filters.group)
@@ -495,7 +570,7 @@ async def welcome_handler(client, message):
         
         await message.reply(welcome_text)
 
-@app.on_message(filters.regex(r'تفعيل الترحيب') & filters.group)
+@app.on_message(filters.regex(r'^تفعيل الترحيب$') & filters.group)
 async def enable_welcome_handler(client, message):
     if not await is_admin(client, message.chat.id, message.from_user.id):
         return await message.reply("⚠️ يجب أن تكون مشرفاً!")
@@ -505,7 +580,7 @@ async def enable_welcome_handler(client, message):
     
     await message.reply("✅ تم تفعيل الترحيب")
 
-@app.on_message(filters.regex(r'تعطيل الترحيب') & filters.group)
+@app.on_message(filters.regex(r'^تعطيل الترحيب$') & filters.group)
 async def disable_welcome_handler(client, message):
     if not await is_admin(client, message.chat.id, message.from_user.id):
         return await message.reply("⚠️ يجب أن تكون مشرفاً!")
@@ -515,7 +590,7 @@ async def disable_welcome_handler(client, message):
     
     await message.reply("✅ تم تعطيل الترحيب")
 
-@app.on_message(filters.regex(r'تعيين رسالة الترحيب\s+(.+)') & filters.group)
+@app.on_message(filters.regex(r'^تعيين رسالة الترحيب\s+(.+)') & filters.group)
 async def set_welcome_handler(client, message):
     if not await is_admin(client, message.chat.id, message.from_user.id):
         return await message.reply("⚠️ يجب أن تكون مشرفاً!")
@@ -529,7 +604,7 @@ async def set_welcome_handler(client, message):
     await message.reply(f"✅ تم تعيين رسالة الترحيب:\n{welcome_msg}")
 
 # ============================================================
-# نظام الحماية (كما هو)
+# نظام الحماية
 # ============================================================
 
 LOCK_TYPES = {
@@ -544,12 +619,12 @@ LOCK_TYPES = {
     'الصوتيات': 'voices'
 }
 
-@app.on_message(filters.regex(r'قفل\s+(\w+)') & filters.group)
+@app.on_message(filters.regex(r'^قفل\s+(\w+)') & filters.group)
 async def lock_handler(client, message):
     if not await is_admin(client, message.chat.id, message.from_user.id):
         return await message.reply("⚠️ يجب أن تكون مشرفاً!")
     
-    match = re.match(r'قفل\s+(\w+)', message.text)
+    match = re.match(r'^قفل\s+(\w+)', message.text)
     lock_type = match.group(1)
     
     if lock_type not in LOCK_TYPES:
@@ -560,12 +635,12 @@ async def lock_handler(client, message):
     
     await message.reply(f"🔒 تم قفل {lock_type}")
 
-@app.on_message(filters.regex(r'فتح\s+(\w+)') & filters.group)
+@app.on_message(filters.regex(r'^فتح\s+(\w+)') & filters.group)
 async def unlock_handler(client, message):
     if not await is_admin(client, message.chat.id, message.from_user.id):
         return await message.reply("⚠️ يجب أن تكون مشرفاً!")
     
-    match = re.match(r'فتح\s+(\w+)', message.text)
+    match = re.match(r'^فتح\s+(\w+)', message.text)
     lock_type = match.group(1)
     
     if lock_type not in LOCK_TYPES:
@@ -580,7 +655,7 @@ async def unlock_handler(client, message):
 # المساعدة المعدلة
 # ============================================================
 
-@app.on_message(filters.regex(r'مساعدة') | filters.regex(r'الاوامر') | filters.command(["start", "help"]))
+@app.on_message(filters.regex(r'^مساعدة$') | filters.regex(r'^الاوامر$') | filters.command(["start", "help"]))
 async def help_handler(client, message):
     help_text = """
 🤖 **أوامر البوت:**
@@ -616,9 +691,10 @@ async def help_handler(client, message):
 `تعيين رسالة الترحيب [نص]` - تعيين رسالة الترحيب
 
 **📋 المعلومات:**
-`ايدي` - معلوماتك الشخصية
-`معلوماتي` - تفاصيل حسابك
-`معلومات المجموعة` - معلومات المجموعة
+`ايدي` - معلوماتك + صورة البروفايل
+`ايدي` (بالرد) - معلومات الشخص + صورته
+`معلوماتي` - تفاصيلك + صورة البروفايل
+`معلومات المجموعة` - معلومات المجموعة + صورتها
 
 **ملاحظة:** جميع أوامر الإدارة تعمل بالرد على رسالة المستخدم فقط!
     """
