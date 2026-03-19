@@ -1,13 +1,14 @@
 """
-utils/music_player.py
-متوافق مع pytgcalls==2.0.0
+utils/music_player.py — pytgcalls==0.0.24
 
-API المعروفة في 2.0.0:
+API المعروفة في 0.0.24:
   from pytgcalls import PyTgCalls
   from pytgcalls.types.input_stream import AudioPiped
   from pytgcalls.types.input_stream.quality import HighQualityAudio
   on_stream_end → callback(client, update)
   update.chat_id
+  join_group_call / change_stream / leave_group_call
+  pause_stream / resume_stream
 """
 
 import logging
@@ -36,7 +37,7 @@ class MusicPlayer:
             await self._play_next(chat_id)
 
     async def play(self, chat_id: int, track: dict):
-        """True=يعزف | False=أُضيف للقائمة | None=فشل"""
+        """True=يعزف | False=قائمة | None=فشل"""
         if self._current.get(chat_id):
             await db_client.push_queue(chat_id, track)
             return False
@@ -60,7 +61,7 @@ class MusicPlayer:
                 AudioPiped(downloaded["path"], HighQualityAudio()),
             )
             self._paused[chat_id] = False
-            logger.info(f"[Music] Playing '{track['title']}' in {chat_id}")
+            logger.info(f"[Music] ▶ Playing '{track['title']}' in {chat_id}")
             return True
         except Exception as e:
             logger.error(f"[Music] join_group_call error: {e}")
@@ -141,7 +142,7 @@ class MusicPlayer:
                 chat_id,
                 AudioPiped(downloaded["path"], HighQualityAudio()),
             )
-            logger.info(f"[Music] Next: '{next_track['title']}' in {chat_id}")
+            logger.info(f"[Music] ▶ Next: '{next_track['title']}' in {chat_id}")
         except Exception as e:
             logger.error(f"[Music] change_stream error: {e}")
             await self._play_next(chat_id)
