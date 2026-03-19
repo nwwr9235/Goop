@@ -242,7 +242,7 @@ GOAL
 
 Build a high-performance Telegram bot that:
 
-• runs on Railway smoothly
+ runs on Railway smoothly
 • supports Arabic commands without slash
 • manages large groups (100k+ members)
 • plays music in voice chat
