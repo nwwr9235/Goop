@@ -4,7 +4,7 @@ tgcrypto==1.2.5
 
 # الحزمة الصحيحة على PyPI هي py-tgcalls وليس pytgcalls
 # py-tgcalls تصدّر PyTgCalls بشكل صحيح
-py-tgcalls==0.9.6
+py-tgcalls==0.9.7
 
 # Database
 motor==3.3.2
