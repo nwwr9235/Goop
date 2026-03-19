@@ -2,11 +2,11 @@ Create a production-ready Telegram Supergroup Management + Music Bot similar to 
 
 The bot must support:
 
-• Group moderation
-• Advanced protection system
-• Auto replies
-• Welcome system
-• Voice chat music player
+ Group moderation
+ Advanced protection system
+ Auto replies
+ Welcome system
+ Voice chat music player
 
 IMPORTANT:
 The bot must support Arabic commands without "/" and work fully inside group messages.
