@@ -1,4 +1,4 @@
-# main.py - النسخة المصححة (بدون StreamType)
+# main.py - النسخة المصححة (تصحيح f-string)
 
 import logging
 import os
@@ -392,7 +392,7 @@ async def ban_handler(client, message):
     
     try:
         await client.ban_chat_member(message.chat.id, target.id)
-        await message.reply(f"✅ تم حظر [{target.first_name}.first_name}](tg://user?id={target.id})!")
+        await message.reply(f"✅ تم حظر [{target.first_name}](tg://user?id={target.id})!")
     except Exception as e:
         await message.reply(f"❌ فشل: {str(e)}")
 
