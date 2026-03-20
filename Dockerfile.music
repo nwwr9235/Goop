@@ -8,7 +8,10 @@ WORKDIR /app
 
 COPY music_bot/requirements.txt ./music_bot/requirements.txt
 
+# تثبيت المكتبات مع التأكد من عدم تعارض pyrogram و pyrofork
 RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir pyrofork==2.3.38 tgcrypto && \
+    pip install --no-cache-dir py-tgcalls==2.2.11 && \
     pip install --no-cache-dir -r music_bot/requirements.txt
 
 # التحقق من التوافق
