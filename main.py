@@ -1,4 +1,4 @@
-# main.py - النسخة المصححة الكاملة
+# main.py - النسخة المعدلة (ايدي مع صورة الملف الشخصي الكبيرة)
 
 import logging
 import os
@@ -6,7 +6,7 @@ import re
 import asyncio
 from datetime import datetime
 from pyrogram import Client, filters
-from pyrogram.types import ChatPermissions, ChatPrivileges
+from pyrogram.types import ChatPermissions, ChatPrivileges, InputMediaPhoto
 from pyrogram.errors import UserAdminInvalid, ChatAdminRequired, UserNotParticipant
 from config import Config
 
@@ -283,7 +283,7 @@ async def clear_warnings_handler(client, message):
     await message.reply(f"✅ تم مسح إنذارات [{target.first_name}](tg://user?id={user_id})")
 
 # ============================================================
-# نظام الردود التلقائية - الإصلاح
+# نظام الردود التلقائية
 # ============================================================
 
 @app.on_message(filters.regex(r'^اضافة رد\s+(.+?)\s*=\s*(.+)', re.DOTALL) & filters.group)
@@ -347,18 +347,18 @@ async def show_replies_handler(client, message):
     await message.reply(text)
 
 # ============================================================
-# معالج الردود التلقائية - الإصلاح
+# معالج الردود التلقائية
 # ============================================================
 
 @app.on_message(filters.text & filters.group, group=1)
 async def auto_reply_handler(client, message):
-    """معالج الردود التلقائية - يعمل قبل الأوامر الأخرى"""
+    """معالج الردود التلقائية"""
     
-    # تجاهل الرسائل الفارغة والبوتات
     if not message.text or message.from_user.is_bot:
         return
     
     text = message.text.strip()
+    lower_text = text.lower()
     
     # قائمة الأوامر التي لا يجب الرد عليها
     admin_commands = [
@@ -370,18 +370,14 @@ async def auto_reply_handler(client, message):
         'قفل', 'فتح', 'ايدي', 'معلوماتي', 'مساعدة', 'الاوامر'
     ]
     
-    # التحقق إذا كانت الرسالة أمراً
-    lower_text = text.lower()
     for cmd in admin_commands:
         if lower_text.startswith(cmd.lower()):
             return
     
-    # البحث عن رد تلقائي
     chat_id = message.chat.id
     if chat_id not in auto_replies:
         return
     
-    # البحث عن تطابق
     for trigger, response in auto_replies[chat_id].items():
         if trigger in lower_text:
             try:
@@ -390,10 +386,9 @@ async def auto_reply_handler(client, message):
                 return
             except Exception as e:
                 logger.error(f"Error sending auto reply: {e}")
-            return
 
 # ============================================================
-# نظام الحماية (القفل) - الإصلاح
+# نظام الحماية (القفل)
 # ============================================================
 
 LOCK_TYPES = {
@@ -458,9 +453,8 @@ async def unlock_handler(client, message):
 
 @app.on_message(filters.all & filters.group, group=2)
 async def protection_handler(client, message):
-    """تطبيق قواعد الحماية على الرسائل الواردة"""
+    """تطبيق قواعد الحماية"""
     
-    # تجاهل الرسائل من المشرفين والبوت
     if not message.from_user:
         return
     
@@ -536,7 +530,7 @@ async def protection_handler(client, message):
                 pass
 
 # ============================================================
-# نظام الترحيب - الإصلاح
+# نظام الترحيب
 # ============================================================
 
 @app.on_message(filters.new_chat_members & filters.group)
@@ -551,11 +545,9 @@ async def welcome_handler(client, message):
     me = await client.get_me()
     
     for new_member in message.new_chat_members:
-        # تجاهل البوت نفسه
         if new_member.id == me.id:
             continue
         
-        # تنسيق رسالة الترحيب
         welcome_text = settings['welcome_message'].format(
             user=new_member.first_name,
             group=message.chat.title,
@@ -612,76 +604,133 @@ async def set_welcome_handler(client, message):
     await message.reply(f"✅ تم تعيين رسالة الترحيب:\n\n{welcome_msg}")
 
 # ============================================================
-# أوامر المعلومات
+# أمر ايدي المعدل - مع صورة الملف الشخصي الكبيرة
 # ============================================================
 
 @app.on_message((filters.regex(r'^ايدي$') | filters.command("id")) & filters.group)
 async def id_handler(client, message):
+    # تحديد المستخدم المستهدف
     target = message.from_user
     
+    # إذا كان هناك رد، استخدم المستخدم المردود عليه
     if message.reply_to_message and message.reply_to_message.from_user:
         target = message.reply_to_message.from_user
     
     chat = message.chat
     
-    photos = []
+    # الحصول على معلومات إضافية عن المستخدم في المجموعة
     try:
-        photos = await client.get_chat_photos(target.id, limit=1)
-    except Exception as e:
-        logger.error(f"Error getting photos: {e}")
+        member = await client.get_chat_member(chat.id, target.id)
+        user_status = member.status
+        user_joined_date = member.joined_date.strftime("%Y-%m-%d") if member.joined_date else "غير معروف"
+    except:
+        user_status = "غير معروف"
+        user_joined_date = "غير معروف"
     
-    text = f"""
-👤 **معلومات المستخدم:**
+    # بناء نص المعلومات بتنسيق جميل
+    info_text = f"""
+┏━ 𝙐𝙎𝙀𝙍 𝙄𝙉𝙁𝙊 ━┓
 
-🆔 **الايدي:** `{target.id}`
-📛 **الاسم:** {target.first_name}
-🔖 **المعرف:** @{target.username if target.username else 'لا يوجد'}
-🤖 **النوع:** {'بوت 🤖' if target.is_bot else 'مستخدم 👤'}
+🆔 **ايدي المستخدم:** `{target.id}`
+👤 **الاسم:** {target.first_name}
+📧 **المعرف:** @{target.username if target.username else 'لا يوجد'}
+📊 **الحالة:** {user_status}
+📅 **تاريخ الانضمام:** {user_joined_date}
+🤖 **النوع:** {'بوت 🤖' if target.is_bot else 'عضو 👤'}
 
-📊 **المجموعة:**
-🆔 **ايدي:** `{chat.id}`
-📛 **الاسم:** {chat.title}
+┏━ 𝙂𝙍𝙊𝙐𝙋 𝙄𝙉𝙁𝙊 ━┓
+
+🆔 **ايدي المجموعة:** `{chat.id}`
+📛 **اسم المجموعة:** {chat.title}
+👥 **عدد الأعضاء:** {await client.get_chat_members_count(chat.id) if chat.type != 'private' else 'N/A'}
     """
     
-    if photos:
-        async for photo in photos:
-            await message.reply_photo(photo.file_id, caption=text)
-            return
-    
-    await message.reply(text)
+    # محاولة الحصول على الصورة بحجم كبير
+    try:
+        # الحصول على صور المستخدم
+        photos = []
+        async for photo in client.get_chat_photos(target.id, limit=1):
+            photos.append(photo)
+        
+        if photos:
+            # إرسال الصورة الكبيرة مع النص
+            await message.reply_photo(
+                photo=photos[0].file_id,
+                caption=info_text,
+                reply_to_message_id=message.id
+            )
+        else:
+            # إذا لم يكن لديه صورة
+            no_photo_text = info_text + "\n\n📷 **لا يوجد صورة ملف شخصي**"
+            await message.reply(
+                no_photo_text,
+                reply_to_message_id=message.id
+            )
+            
+    except Exception as e:
+        logger.error(f"Error in id command: {e}")
+        # في حالة الخطأ، إرسال النص فقط
+        await message.reply(
+            info_text,
+            reply_to_message_id=message.id
+        )
+
+# ============================================================
+# أمر معلوماتي
+# ============================================================
 
 @app.on_message(filters.regex(r'^معلوماتي$') & filters.group)
 async def my_info_handler(client, message):
     user = message.from_user
+    chat = message.chat
     
-    photos = []
+    # الحصول على معلومات المستخدم في المجموعة
     try:
-        photos = await client.get_chat_photos(user.id, limit=1)
-    except Exception as e:
-        logger.error(f"Error getting photos: {e}")
-    
-    try:
-        member = await client.get_chat_member(message.chat.id, user.id)
-        status = member.status
+        member = await client.get_chat_member(chat.id, user.id)
+        user_status = member.status
+        user_joined_date = member.joined_date.strftime("%Y-%m-%d") if member.joined_date else "غير معروف"
     except:
-        status = "غير معروف"
+        user_status = "غير معروف"
+        user_joined_date = "غير معروف"
     
-    text = f"""
-👤 **معلوماتك:**
+    # بناء النص
+    info_text = f"""
+┏━ 𝙈𝙔 𝙄𝙉𝙁𝙊 ━┓
 
-🆔 **الايدي:** `{user.id}`
-📛 **الاسم:** {user.first_name}
-📧 **المعرف:** @{user.username if user.username else 'لا يوجد'}
-📊 **الحالة:** {status}
-🤖 **النوع:** {'بوت 🤖' if user.is_bot else 'مستخدم 👤'}
+🆔 **ايديك:** `{user.id}`
+👤 **اسمك:** {user.first_name}
+📧 **معرفك:** @{user.username if user.username else 'لا يوجد'}
+📊 **حالتك:** {user_status}
+📅 **تاريخ انضمامك:** {user_joined_date}
+🤖 **نوع حسابك:** {'بوت 🤖' if user.is_bot else 'مستخدم 👤'}
+
+┏━ 𝙂𝙍𝙊𝙐𝙋 𝙄𝙉𝙁𝙊 ━┓
+
+🆔 **ايدي المجموعة:** `{chat.id}`
+📛 **اسم المجموعة:** {chat.title}
     """
     
-    if photos:
-        async for photo in photos:
-            await message.reply_photo(photo.file_id, caption=text)
-            return
-    
-    await message.reply(text)
+    # محاولة الحصول على الصورة
+    try:
+        photos = []
+        async for photo in client.get_chat_photos(user.id, limit=1):
+            photos.append(photo)
+        
+        if photos:
+            await message.reply_photo(
+                photo=photos[0].file_id,
+                caption=info_text,
+                reply_to_message_id=message.id
+            )
+        else:
+            await message.reply(
+                info_text + "\n\n📷 **لا يوجد صورة ملف شخصي**",
+                reply_to_message_id=message.id
+            )
+            
+    except Exception as e:
+        logger.error(f"Error in my_info: {e}")
+        await message.reply(info_text, reply_to_message_id=message.id)
 
 # ============================================================
 # المساعدة
