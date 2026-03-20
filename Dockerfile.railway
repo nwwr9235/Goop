@@ -1,0 +1,29 @@
+FROM python:3.11-slim
+
+# ── System dependencies ───────────────────────────────────────────────────────
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg git curl wget build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# ── Python dependencies ───────────────────────────────────────────────────────
+COPY requirements.txt .
+
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt && \
+    # تحقق مما تم تثبيته فعلاً
+    echo "=== INSTALLED PACKAGES ===" && pip list | grep -i tgcalls && \
+    echo "=== pytgcalls EXPORTS ===" && python3 -c "import pytgcalls; print(dir(pytgcalls))" || true && \
+    echo "=== py_tgcalls EXPORTS ===" && python3 -c "from pytgcalls import PyTgCalls; print('PyTgCalls OK')" || true
+
+# ── Copy source code ──────────────────────────────────────────────────────────
+COPY . .
+
+RUN mkdir -p /tmp/arabbot_music
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    DOWNLOAD_DIR=/tmp/arabbot_music
+
+CMD ["python", "main.py"]
