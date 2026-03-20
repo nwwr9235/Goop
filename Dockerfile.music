@@ -8,14 +8,14 @@ WORKDIR /app
 
 COPY music_bot/requirements.txt ./music_bot/requirements.txt
 
-# تثبيت المكتبات مع التأكد من عدم تعارض pyrogram و pyrofork
+# ✅ تثبيت المكتبات مع force-reinstall للتأكد من عدم وجود cached packages قديمة
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir pyrofork==2.3.38 tgcrypto && \
-    pip install --no-cache-dir py-tgcalls==2.2.11 && \
-    pip install --no-cache-dir -r music_bot/requirements.txt
+    pip install --no-cache-dir --force-reinstall pyrofork==2.3.38 tgcrypto && \
+    pip install --no-cache-dir --force-reinstall py-tgcalls==2.2.11 && \
+    pip install --no-cache-dir --force-reinstall -r music_bot/requirements.txt
 
 # التحقق من التوافق
-RUN python -c "from pytgcalls import PyTgCalls; print('✅ PyTgCalls جاهز')"
+RUN python -c "from pytgcalls import PyTgCalls; from pytgcalls.types import StreamEnded; print('✅ PyTgCalls و StreamEnded جاهزان')"
 
 COPY shared/ ./shared/
 COPY music_bot/ ./music_bot/
