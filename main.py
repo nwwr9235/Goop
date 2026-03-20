@@ -1,4 +1,4 @@
-# main.py - النسخة المعدلة (ايدي مع صورة الملف الشخصي الكبيرة)
+# main.py - النسخة المعدلة (ا = معلومات+صورة، اا = صورتك فقط، افتاره = صورته بالرد)
 
 import logging
 import os
@@ -6,7 +6,7 @@ import re
 import asyncio
 from datetime import datetime
 from pyrogram import Client, filters
-from pyrogram.types import ChatPermissions, ChatPrivileges, InputMediaPhoto
+from pyrogram.types import ChatPermissions, ChatPrivileges
 from pyrogram.errors import UserAdminInvalid, ChatAdminRequired, UserNotParticipant
 from config import Config
 
@@ -367,7 +367,7 @@ async def auto_reply_handler(client, message):
         'عرض انذارات', 'مسح انذارات',
         'اضافة رد', 'حذف رد', 'عرض الردود',
         'تفعيل الترحيب', 'تعطيل الترحيب', 'تعيين رسالة الترحيب',
-        'قفل', 'فتح', 'ايدي', 'معلوماتي', 'مساعدة', 'الاوامر'
+        'قفل', 'فتح', 'ا', 'افتاره', 'مساعدة', 'الاوامر'
     ]
     
     for cmd in admin_commands:
@@ -604,21 +604,18 @@ async def set_welcome_handler(client, message):
     await message.reply(f"✅ تم تعيين رسالة الترحيب:\n\n{welcome_msg}")
 
 # ============================================================
-# أمر ايدي المعدل - مع صورة الملف الشخصي الكبيرة
+# أمر ا - معلوماتك + صورتك (بدون رد)
 # ============================================================
 
-@app.on_message((filters.regex(r'^ايدي$') | filters.command("id")) & filters.group)
-async def id_handler(client, message):
-    # تحديد المستخدم المستهدف
+@app.on_message(filters.regex(r'^ا$') & filters.group)
+async def id_short_handler(client, message):
+    """أمر مختصر: ا - يظهر معلوماتك وصورتك فقط (بدون رد)"""
+    
+    # دائماً يعرض معلومات الشخص الذي كتب الأمر
     target = message.from_user
-    
-    # إذا كان هناك رد، استخدم المستخدم المردود عليه
-    if message.reply_to_message and message.reply_to_message.from_user:
-        target = message.reply_to_message.from_user
-    
     chat = message.chat
     
-    # الحصول على معلومات إضافية عن المستخدم في المجموعة
+    # الحصول على معلومات إضافية
     try:
         member = await client.get_chat_member(chat.id, target.id)
         user_status = member.status
@@ -627,113 +624,123 @@ async def id_handler(client, message):
         user_status = "غير معروف"
         user_joined_date = "غير معروف"
     
-    # بناء نص المعلومات بتنسيق جميل
+    # بناء نص المعلومات
     info_text = f"""
 ┏━ 𝙐𝙎𝙀𝙍 𝙄𝙉𝙁𝙊 ━┓
 
-🆔 **ايدي المستخدم:** `{target.id}`
+🆔 **ايدي:** `{target.id}`
 👤 **الاسم:** {target.first_name}
 📧 **المعرف:** @{target.username if target.username else 'لا يوجد'}
 📊 **الحالة:** {user_status}
-📅 **تاريخ الانضمام:** {user_joined_date}
+📅 **الانضمام:** {user_joined_date}
 🤖 **النوع:** {'بوت 🤖' if target.is_bot else 'عضو 👤'}
 
 ┏━ 𝙂𝙍𝙊𝙐𝙋 𝙄𝙉𝙁𝙊 ━┓
 
-🆔 **ايدي المجموعة:** `{chat.id}`
-📛 **اسم المجموعة:** {chat.title}
-👥 **عدد الأعضاء:** {await client.get_chat_members_count(chat.id) if chat.type != 'private' else 'N/A'}
+🆔 **ايدي:** `{chat.id}`
+📛 **الاسم:** {chat.title}
+👥 **الأعضاء:** {await client.get_chat_members_count(chat.id) if chat.type != 'private' else 'N/A'}
     """
     
-    # محاولة الحصول على الصورة بحجم كبير
+    # إرسال الصورة مع المعلومات
     try:
-        # الحصول على صور المستخدم
         photos = []
         async for photo in client.get_chat_photos(target.id, limit=1):
             photos.append(photo)
         
         if photos:
-            # إرسال الصورة الكبيرة مع النص
             await message.reply_photo(
                 photo=photos[0].file_id,
                 caption=info_text,
                 reply_to_message_id=message.id
             )
         else:
-            # إذا لم يكن لديه صورة
-            no_photo_text = info_text + "\n\n📷 **لا يوجد صورة ملف شخصي**"
             await message.reply(
-                no_photo_text,
+                info_text + "\n\n📷 **لا توجد صورة**",
                 reply_to_message_id=message.id
             )
             
     except Exception as e:
-        logger.error(f"Error in id command: {e}")
-        # في حالة الخطأ، إرسال النص فقط
+        logger.error(f"Error in id_short: {e}")
+        await message.reply(info_text, reply_to_message_id=message.id)
+
+# ============================================================
+# أمر اا - صورتك فقط (بدون رد، بدون معلومات)
+# ============================================================
+
+@app.on_message(filters.regex(r'^اا$') & filters.group)
+async def my_photo_only_handler(client, message):
+    """أمر مختصر: اا - يظهر صورة ملفك الشخصي فقط"""
+    
+    # دائماً يعرض صورة الشخص الذي كتب الأمر
+    target = message.from_user
+    
+    try:
+        # الحصول على الصور
+        photos = []
+        async for photo in client.get_chat_photos(target.id, limit=1):
+            photos.append(photo)
+        
+        if photos:
+            # إرسال الصورة فقط بدون أي نص
+            await message.reply_photo(
+                photo=photos[0].file_id,
+                reply_to_message_id=message.id
+            )
+        else:
+            await message.reply(
+                "📷 **لا يوجد صورة ملف شخصي**",
+                reply_to_message_id=message.id
+            )
+            
+    except Exception as e:
+        logger.error(f"Error in my_photo_only: {e}")
         await message.reply(
-            info_text,
+            "❌ تعذر عرض الصورة",
             reply_to_message_id=message.id
         )
 
 # ============================================================
-# أمر معلوماتي
+# أمر افتاره - صورته فقط (يجب الرد على رسالته)
 # ============================================================
 
-@app.on_message(filters.regex(r'^معلوماتي$') & filters.group)
-async def my_info_handler(client, message):
-    user = message.from_user
-    chat = message.chat
+@app.on_message(filters.regex(r'^افتاره$') & filters.group)
+async def his_photo_handler(client, message):
+    """أمر: افتاره - يظهر صورة المستخدم المردود عليه فقط"""
     
-    # الحصول على معلومات المستخدم في المجموعة
+    # يجب الرد على رسالة المستخدم
+    target = await get_target_from_reply(message)
+    
+    if not target:
+        return await message.reply("⚠️ عليك الرد على رسالة الشخص لعرض صورته!")
+    
     try:
-        member = await client.get_chat_member(chat.id, user.id)
-        user_status = member.status
-        user_joined_date = member.joined_date.strftime("%Y-%m-%d") if member.joined_date else "غير معروف"
-    except:
-        user_status = "غير معروف"
-        user_joined_date = "غير معروف"
-    
-    # بناء النص
-    info_text = f"""
-┏━ 𝙈𝙔 𝙄𝙉𝙁𝙊 ━┓
-
-🆔 **ايديك:** `{user.id}`
-👤 **اسمك:** {user.first_name}
-📧 **معرفك:** @{user.username if user.username else 'لا يوجد'}
-📊 **حالتك:** {user_status}
-📅 **تاريخ انضمامك:** {user_joined_date}
-🤖 **نوع حسابك:** {'بوت 🤖' if user.is_bot else 'مستخدم 👤'}
-
-┏━ 𝙂𝙍𝙊𝙐𝙋 𝙄𝙉𝙁𝙊 ━┓
-
-🆔 **ايدي المجموعة:** `{chat.id}`
-📛 **اسم المجموعة:** {chat.title}
-    """
-    
-    # محاولة الحصول على الصورة
-    try:
+        # الحصول على الصور
         photos = []
-        async for photo in client.get_chat_photos(user.id, limit=1):
+        async for photo in client.get_chat_photos(target.id, limit=1):
             photos.append(photo)
         
         if photos:
+            # إرسال الصورة فقط بدون أي نص
             await message.reply_photo(
                 photo=photos[0].file_id,
-                caption=info_text,
                 reply_to_message_id=message.id
             )
         else:
             await message.reply(
-                info_text + "\n\n📷 **لا يوجد صورة ملف شخصي**",
+                f"📷 **{target.first_name} ليس لديه صورة ملف شخصي**",
                 reply_to_message_id=message.id
             )
             
     except Exception as e:
-        logger.error(f"Error in my_info: {e}")
-        await message.reply(info_text, reply_to_message_id=message.id)
+        logger.error(f"Error in his_photo: {e}")
+        await message.reply(
+            "❌ تعذر عرض الصورة",
+            reply_to_message_id=message.id
+        )
 
 # ============================================================
-# المساعدة
+# المساعدة المعدلة
 # ============================================================
 
 @app.on_message(filters.regex(r'^مساعدة$|^الاوامر$') | filters.command(["start", "help"]))
@@ -767,9 +774,9 @@ async def help_handler(client, message):
 `تعيين رسالة الترحيب [نص]`
 
 **📋 المعلومات:**
-`ايدي` - معلوماتك + صورتك
-`ايدي` (بالرد) - معلوماته + صورته
-`معلوماتي` - معلوماتك + صورتك
+`ا` - معلوماتك + صورتك
+`اا` - صورتك فقط
+`افتاره` (رد) - صورته فقط
 
 **ملاحظة:** جميع الأوامر تعمل في المجموعات فقط!
     """
