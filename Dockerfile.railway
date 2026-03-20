@@ -6,16 +6,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
+# ✅ تثبيت صريح مع force reinstall
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir \
-    pyrogram>=2.0.0 \
-    py-tgcalls>=1.0.0 \
-    tgcrypto>=1.2.5 \
-    motor>=3.0.0 \
-    python-dotenv>=0.19.0 \
-    yt-dlp>=2023.0.0 \
-    ffmpeg-python>=0.2.0 \
-    pydantic>=1.10.0
+    pip install --no-cache-dir --force-reinstall \
+    "pyrogram>=2.0.0" \
+    "py-tgcalls>=1.0.0" \
+    "tgcrypto>=1.2.5" \
+    "motor>=3.0.0" \
+    "python-dotenv>=0.19.0" \
+    "yt-dlp>=2023.0.0" \
+    "ffmpeg-python>=0.2.0" \
+    "pydantic>=1.10.0"
+
+# ✅ التحقق من التثبيت
+RUN python -c "from pytgcalls import PyTgCalls; from pytgcalls.types import AudioPiped; print('✅ py-tgcalls OK')"
 
 COPY . .
 
@@ -26,4 +30,3 @@ ENV PYTHONUNBUFFERED=1 \
     DOWNLOAD_DIR=/tmp/arabbot_music
 
 CMD ["python", "main.py"]
-
