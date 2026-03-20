@@ -1,4 +1,4 @@
-# main.py - النسخة المعدلة مع نظام موسيقى كامل
+# main.py - النسخة المصححة (بدون StreamType)
 
 import logging
 import os
@@ -10,7 +10,7 @@ from pyrogram import Client, filters
 from pyrogram.types import ChatPermissions, ChatPrivileges
 from pyrogram.errors import UserAdminInvalid, ChatAdminRequired, UserNotParticipant
 from pytgcalls import PyTgCalls
-from pytgcalls.types import Update, StreamType
+from pytgcalls.types import Update
 from pytgcalls.types.input_stream import InputAudioStream, InputStream
 from config import Config
 
@@ -151,7 +151,6 @@ async def play_next_song(client, chat_id):
                         song['file_path'],
                     ),
                 ),
-                stream_type=StreamType().local_stream,
             )
         except Exception as e:
             logger.error(f"Error joining call: {e}")
@@ -393,7 +392,7 @@ async def ban_handler(client, message):
     
     try:
         await client.ban_chat_member(message.chat.id, target.id)
-        await message.reply(f"✅ تم حظر [{target.first_name}](tg://user?id={target.id})!")
+        await message.reply(f"✅ تم حظر [{target.first_name}.first_name}](tg://user?id={target.id})!")
     except Exception as e:
         await message.reply(f"❌ فشل: {str(e)}")
 
