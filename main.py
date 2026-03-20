@@ -1,13 +1,17 @@
-# main.py - النسخة المعدلة (ا = معلومات+صورة، اا = صورتك فقط، افتاره = صورته بالرد)
+# main.py - النسخة المعدلة مع نظام موسيقى كامل
 
 import logging
 import os
 import re
 import asyncio
+import yt_dlp
 from datetime import datetime
 from pyrogram import Client, filters
 from pyrogram.types import ChatPermissions, ChatPrivileges
 from pyrogram.errors import UserAdminInvalid, ChatAdminRequired, UserNotParticipant
+from pytgcalls import PyTgCalls
+from pytgcalls.types import Update, StreamType
+from pytgcalls.types.input_stream import InputAudioStream, InputStream
 from config import Config
 
 logging.basicConfig(
@@ -16,6 +20,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# تهيئة البوت
 app = Client(
     "bot",
     api_id=Config.API_ID,
@@ -23,13 +28,21 @@ app = Client(
     bot_token=Config.BOT_TOKEN
 )
 
+# تهيئة PyTgCalls للمكالمات الصوتية
+pytgcalls = PyTgCalls(app)
+
 # ============================================================
-# قاعدة بيانات مؤقتة في الذاكرة
+# قواعد البيانات
 # ============================================================
 
 group_settings = {}
 auto_replies = {}
 warnings_db = {}
+
+# قاعدة بيانات الموسيقى
+music_queues = {}  # {chat_id: [song_dict, ...]}
+current_song = {}  # {chat_id: song_dict}
+is_playing = {}    # {chat_id: bool}
 
 def get_group_settings(chat_id):
     if chat_id not in group_settings:
@@ -67,6 +80,242 @@ async def get_target_from_reply(message):
         logger.info(f"Target from reply: {target.id} - {target.first_name}")
         return target
     return None
+
+# ============================================================
+# نظام الموسيقى - دوال مساعدة
+# ============================================================
+
+async def download_song(query):
+    """تحميل الأغنية من YouTube"""
+    ydl_opts = {
+        'format': 'bestaudio/best',
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }],
+        'outtmpl': 'downloads/%(title)s.%(ext)s',
+        'quiet': True,
+        'no_warnings': True,
+    }
+    
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            # البحث في YouTube
+            info = ydl.extract_info(f"ytsearch:{query}", download=False)
+            if 'entries' in info:
+                info = info['entries'][0]
+            
+            title = info.get('title', 'Unknown')
+            duration = info.get('duration', 0)
+            url = info.get('webpage_url', '')
+            thumbnail = info.get('thumbnail', '')
+            
+            # تحميل الملف
+            file_path = ydl.prepare_filename(info)
+            ydl.download([url])
+            
+            # إرجاع معلومات الأغنية
+            return {
+                'title': title,
+                'file_path': file_path.replace('.webm', '.mp3').replace('.m4a', '.mp3'),
+                'duration': duration,
+                'url': url,
+                'thumbnail': thumbnail
+            }
+    except Exception as e:
+        logger.error(f"Error downloading song: {e}")
+        return None
+
+async def play_next_song(client, chat_id):
+    """تشغيل الأغنية التالية في القائمة"""
+    global music_queues, current_song, is_playing
+    
+    if chat_id not in music_queues or not music_queues[chat_id]:
+        is_playing[chat_id] = False
+        current_song[chat_id] = None
+        return
+    
+    # الحصول على الأغنية التالية
+    song = music_queues[chat_id].pop(0)
+    current_song[chat_id] = song
+    is_playing[chat_id] = True
+    
+    try:
+        # الانضمام إلى المكالمة إذا لم نكن فيها
+        try:
+            await pytgcalls.join_group_call(
+                chat_id,
+                InputStream(
+                    InputAudioStream(
+                        song['file_path'],
+                    ),
+                ),
+                stream_type=StreamType().local_stream,
+            )
+        except Exception as e:
+            logger.error(f"Error joining call: {e}")
+            # ربما نحن بالفعل في المكالمة، نحاول التشغيل مباشرة
+            await pytgcalls.change_stream(
+                chat_id,
+                InputStream(
+                    InputAudioStream(
+                        song['file_path'],
+                    ),
+                ),
+            )
+        
+        # إرسال رسالة التشغيل
+        await client.send_message(
+            chat_id,
+            f"🎵 **يتم تشغيل:**\n{song['title']}\n⏱ المدة: {song['duration']//60}:{song['duration']%60:02d}"
+        )
+        
+    except Exception as e:
+        logger.error(f"Error playing song: {e}")
+        is_playing[chat_id] = False
+        await client.send_message(chat_id, f"❌ فشل تشغيل: {str(e)}")
+
+# ============================================================
+# أوامر الموسيقى
+# ============================================================
+
+@app.on_message(filters.regex(r'^تشغيل\s+(.+)') & filters.group)
+async def play_handler(client, message):
+    """أمر تشغيل: تشغيل <اسم الأغنية أو الرابط>"""
+    chat_id = message.chat.id
+    
+    # استخراج اسم الأغنية
+    match = re.match(r'^تشغيل\s+(.+)', message.text)
+    if not match:
+        return await message.reply("⚠️ الصيغة: تشغيل <اسم الأغنية>")
+    
+    query = match.group(1).strip()
+    
+    # إرسال رسالة البحث
+    status_msg = await message.reply("🔍 **جاري البحث...**")
+    
+    # تحميل الأغنية
+    song = await download_song(query)
+    
+    if not song:
+        return await status_msg.edit("❌ **لم يتم العثور على الأغنية**")
+    
+    # إضافة إلى القائمة
+    if chat_id not in music_queues:
+        music_queues[chat_id] = []
+    
+    music_queues[chat_id].append(song)
+    
+    await status_msg.edit(f"✅ **تم إضافة إلى القائمة:**\n🎵 {song['title']}")
+    
+    # إذا لم يكن هناك تشغيل حالي، ابدأ التشغيل
+    if not is_playing.get(chat_id, False):
+        await play_next_song(client, chat_id)
+
+@app.on_message(filters.regex(r'^تخطي$') & filters.group)
+async def skip_handler(client, message):
+    """أمر تخطي: تخطي الأغنية الحالية"""
+    chat_id = message.chat.id
+    
+    if not is_playing.get(chat_id, False):
+        return await message.reply("⚠️ **لا يوجد تشغيل حالي**")
+    
+    try:
+        await pytgcalls.leave_group_call(chat_id)
+        await message.reply("⏭ **تم تخطي الأغنية**")
+        
+        # تشغيل التالية
+        await asyncio.sleep(1)
+        await play_next_song(client, chat_id)
+    except Exception as e:
+        logger.error(f"Error skipping: {e}")
+        await message.reply(f"❌ فشل التخطي: {str(e)}")
+
+@app.on_message(filters.regex(r'^ايقاف$') & filters.group)
+async def stop_handler(client, message):
+    """أمر إيقاف: إيقاف التشغيل"""
+    chat_id = message.chat.id
+    
+    if not is_playing.get(chat_id, False):
+        return await message.reply("⚠️ **لا يوجد تشغيل حالي**")
+    
+    try:
+        await pytgcalls.leave_group_call(chat_id)
+        music_queues[chat_id] = []
+        is_playing[chat_id] = False
+        current_song[chat_id] = None
+        await message.reply("⏹ **تم إيقاف التشغيل**")
+    except Exception as e:
+        logger.error(f"Error stopping: {e}")
+        await message.reply(f"❌ فشل الإيقاف: {str(e)}")
+
+@app.on_message(filters.regex(r'^ايقاف مؤقت$') & filters.group)
+async def pause_handler(client, message):
+    """أمر إيقاف مؤقت"""
+    chat_id = message.chat.id
+    
+    if not is_playing.get(chat_id, False):
+        return await message.reply("⚠️ **لا يوجد تشغيل حالي**")
+    
+    try:
+        await pytgcalls.pause_stream(chat_id)
+        await message.reply("⏸ **تم إيقاف مؤقت**")
+    except Exception as e:
+        logger.error(f"Error pausing: {e}")
+        await message.reply(f"❌ فشل: {str(e)}")
+
+@app.on_message(filters.regex(r'^استئناف$') & filters.group)
+async def resume_handler(client, message):
+    """أمر استئناف"""
+    chat_id = message.chat.id
+    
+    if not is_playing.get(chat_id, False):
+        return await message.reply("⚠️ **لا يوجد تشغيل متوقف**")
+    
+    try:
+        await pytgcalls.resume_stream(chat_id)
+        await message.reply("▶️ **تم الاستئناف**")
+    except Exception as e:
+        logger.error(f"Error resuming: {e}")
+        await message.reply(f"❌ فشل: {str(e)}")
+
+@app.on_message(filters.regex(r'^قائمة التشغيل$') & filters.group)
+async def queue_handler(client, message):
+    """أمر قائمة التشغيل"""
+    chat_id = message.chat.id
+    
+    if chat_id not in music_queues or not music_queues[chat_id]:
+        if not current_song.get(chat_id):
+            return await message.reply("📭 **قائمة التشغيل فارغة**")
+    
+    text = "📋 **قائمة التشغيل:**\n\n"
+    
+    # الأغنية الحالية
+    if current_song.get(chat_id):
+        text += f"▶️ **الحالية:** {current_song[chat_id]['title']}\n\n"
+    
+    # الأغاني في الانتظار
+    if chat_id in music_queues:
+        for i, song in enumerate(music_queues[chat_id], 1):
+            text += f"{i}. {song['title']}\n"
+    
+    await message.reply(text)
+
+@app.on_message(filters.regex(r'^مغادرة$') & filters.group)
+async def leave_handler(client, message):
+    """أمر مغادرة: مغادرة المكالمة الصوتية"""
+    chat_id = message.chat.id
+    
+    try:
+        await pytgcalls.leave_group_call(chat_id)
+        music_queues[chat_id] = []
+        is_playing[chat_id] = False
+        current_song[chat_id] = None
+        await message.reply("👋 **تم مغادرة المكالمة**")
+    except Exception as e:
+        logger.error(f"Error leaving: {e}")
+        await message.reply(f"❌ فشل المغادرة: {str(e)}")
 
 # ============================================================
 # الأوامر الإدارية (تعمل بالرد فقط)
@@ -367,7 +616,9 @@ async def auto_reply_handler(client, message):
         'عرض انذارات', 'مسح انذارات',
         'اضافة رد', 'حذف رد', 'عرض الردود',
         'تفعيل الترحيب', 'تعطيل الترحيب', 'تعيين رسالة الترحيب',
-        'قفل', 'فتح', 'ا', 'افتاره', 'مساعدة', 'الاوامر'
+        'قفل', 'فتح', 'ا', 'افتاره', 'مساعدة', 'الاوامر',
+        'تشغيل', 'تخطي', 'ايقاف', 'ايقاف مؤقت', 'استئناف',
+        'قائمة التشغيل', 'مغادرة'
     ]
     
     for cmd in admin_commands:
@@ -604,18 +855,16 @@ async def set_welcome_handler(client, message):
     await message.reply(f"✅ تم تعيين رسالة الترحيب:\n\n{welcome_msg}")
 
 # ============================================================
-# أمر ا - معلوماتك + صورتك (بدون رد)
+# أمر ا - معلوماتك + صورتك
 # ============================================================
 
 @app.on_message(filters.regex(r'^ا$') & filters.group)
 async def id_short_handler(client, message):
-    """أمر مختصر: ا - يظهر معلوماتك وصورتك فقط (بدون رد)"""
+    """أمر مختصر: ا - يظهر معلوماتك وصورتك فقط"""
     
-    # دائماً يعرض معلومات الشخص الذي كتب الأمر
     target = message.from_user
     chat = message.chat
     
-    # الحصول على معلومات إضافية
     try:
         member = await client.get_chat_member(chat.id, target.id)
         user_status = member.status
@@ -624,7 +873,6 @@ async def id_short_handler(client, message):
         user_status = "غير معروف"
         user_joined_date = "غير معروف"
     
-    # بناء نص المعلومات
     info_text = f"""
 ┏━ 𝙐𝙎𝙀𝙍 𝙄𝙉𝙁𝙊 ━┓
 
@@ -642,7 +890,6 @@ async def id_short_handler(client, message):
 👥 **الأعضاء:** {await client.get_chat_members_count(chat.id) if chat.type != 'private' else 'N/A'}
     """
     
-    # إرسال الصورة مع المعلومات
     try:
         photos = []
         async for photo in client.get_chat_photos(target.id, limit=1):
@@ -665,24 +912,21 @@ async def id_short_handler(client, message):
         await message.reply(info_text, reply_to_message_id=message.id)
 
 # ============================================================
-# أمر اا - صورتك فقط (بدون رد، بدون معلومات)
+# أمر اا - صورتك فقط
 # ============================================================
 
 @app.on_message(filters.regex(r'^اا$') & filters.group)
 async def my_photo_only_handler(client, message):
     """أمر مختصر: اا - يظهر صورة ملفك الشخصي فقط"""
     
-    # دائماً يعرض صورة الشخص الذي كتب الأمر
     target = message.from_user
     
     try:
-        # الحصول على الصور
         photos = []
         async for photo in client.get_chat_photos(target.id, limit=1):
             photos.append(photo)
         
         if photos:
-            # إرسال الصورة فقط بدون أي نص
             await message.reply_photo(
                 photo=photos[0].file_id,
                 reply_to_message_id=message.id
@@ -701,27 +945,24 @@ async def my_photo_only_handler(client, message):
         )
 
 # ============================================================
-# أمر افتاره - صورته فقط (يجب الرد على رسالته)
+# أمر افتاره - صورته فقط (يجب الرد)
 # ============================================================
 
 @app.on_message(filters.regex(r'^افتاره$') & filters.group)
 async def his_photo_handler(client, message):
     """أمر: افتاره - يظهر صورة المستخدم المردود عليه فقط"""
     
-    # يجب الرد على رسالة المستخدم
     target = await get_target_from_reply(message)
     
     if not target:
         return await message.reply("⚠️ عليك الرد على رسالة الشخص لعرض صورته!")
     
     try:
-        # الحصول على الصور
         photos = []
         async for photo in client.get_chat_photos(target.id, limit=1):
             photos.append(photo)
         
         if photos:
-            # إرسال الصورة فقط بدون أي نص
             await message.reply_photo(
                 photo=photos[0].file_id,
                 reply_to_message_id=message.id
@@ -747,6 +988,15 @@ async def his_photo_handler(client, message):
 async def help_handler(client, message):
     help_text = """
 🤖 **أوامر البوت:**
+
+**🎵 الموسيقى (المكالمات الصوتية):**
+`تشغيل <اسم الأغنية>` - تشغيل من YouTube
+`تخطي` - تخطي الأغنية الحالية
+`ايقاف` - إيقاف التشغيل
+`ايقاف مؤقت` - إيقاف مؤقت
+`استئناف` - استئناف التشغيل
+`قائمة التشغيل` - عرض الأغاني في الانتظار
+`مغادرة` - مغادرة المكالمة
 
 **👮‍♂️ الإدارة (بالرد):**
 `رفع مشرف` `تنزيل مشرف` `حظر` `الغاء حظر`
@@ -789,4 +1039,9 @@ async def help_handler(client, message):
 
 if __name__ == "__main__":
     logger.info("🚀 جاري تشغيل البوت...")
+    
+    # بدء PyTgCalls
+    pytgcalls.start()
+    
+    # تشغيل البوت
     app.run()
