@@ -1,4 +1,4 @@
-# main.py - النسخة المتوافقة مع py-tgcalls الجديدة
+# main.py - النسخة المتوافقة مع py-tgcalls الجديدة (v2.2+)
 
 import logging
 import os
@@ -20,7 +20,7 @@ from pyrogram.types import ChatPermissions, ChatPrivileges
 
 # ✅ استيراد py-tgcalls الجديدة (مع شرطة)
 from pytgcalls import PyTgCalls
-from pytgcalls.types import AudioPiped
+from pytgcalls import idle   # للحفاظ على تشغيل البوت
 
 from config import Config
 
@@ -140,14 +140,8 @@ async def play_next_song(client, chat_id):
     is_playing[chat_id] = True
     
     try:
-        # ✅ استخدام AudioPiped مع py-tgcalls الجديدة
-        audio = AudioPiped(song['file_path'])
-        
-        try:
-            await pytgcalls.join_group_call(chat_id, audio)
-        except Exception as e:
-            logger.error(f"Already in call or error: {e}")
-            await pytgcalls.change_stream(chat_id, audio)
+        # ✅ استخدام play() مع مسار الملف مباشرة
+        await pytgcalls.play(chat_id, audio_source=song['file_path'])
         
         await client.send_message(
             chat_id,
@@ -158,6 +152,14 @@ async def play_next_song(client, chat_id):
         logger.error(f"Error playing: {e}")
         is_playing[chat_id] = False
         await client.send_message(chat_id, f"❌ فشل: {str(e)}")
+
+# ============================================================
+# معالج انتهاء التشغيل التلقائي
+# ============================================================
+@pytgcalls.on_stream_end()
+async def on_stream_end(client, update):
+    chat_id = update.chat_id
+    await play_next_song(app, chat_id)
 
 # ============================================================
 # أوامر الموسيقى
@@ -281,7 +283,7 @@ async def leave_handler(client, message):
         await message.reply(f"❌ فشل: {str(e)}")
 
 # ============================================================
-# الأوامر الإدارية
+# الأوامر الإدارية (لم تتغير)
 # ============================================================
 
 @app.on_message(filters.regex(r'^رفع مشرف$') & filters.group)
@@ -431,7 +433,7 @@ async def kick_handler(client, message):
         await message.reply(f"❌ فشل: {str(e)}")
 
 # ============================================================
-# نظام الإنذارات
+# نظام الإنذارات (لم يتغير)
 # ============================================================
 
 @app.on_message(filters.regex(r'^انذار$') & filters.group)
@@ -495,7 +497,7 @@ async def clear_warnings_handler(client, message):
     await message.reply(f"✅ تم مسح إنذارات [{target.first_name}](tg://user?id={user_id})")
 
 # ============================================================
-# نظام الردود التلقائية
+# نظام الردود التلقائية (لم يتغير)
 # ============================================================
 
 @app.on_message(filters.regex(r'^اضافة رد\s+(.+?)\s*=\s*(.+)', re.DOTALL) & filters.group)
@@ -584,7 +586,7 @@ async def auto_reply_handler(client, message):
                 logger.error(f"Error auto reply: {e}")
 
 # ============================================================
-# نظام الحماية (القفل)
+# نظام الحماية (القفل) - لم يتغير
 # ============================================================
 
 LOCK_TYPES = {
@@ -704,7 +706,7 @@ async def protection_handler(client, message):
                 pass
 
 # ============================================================
-# نظام الترحيب
+# نظام الترحيب (لم يتغير)
 # ============================================================
 
 @app.on_message(filters.new_chat_members & filters.group)
@@ -766,7 +768,7 @@ async def set_welcome_handler(client, message):
     await message.reply(f"✅ تم تعيين رسالة الترحيب:\n\n{welcome_msg}")
 
 # ============================================================
-# أوامر المعلومات
+# أوامر المعلومات (لم تتغير)
 # ============================================================
 
 @app.on_message(filters.regex(r'^ا$') & filters.group)
@@ -908,5 +910,8 @@ if __name__ == "__main__":
     
     os.makedirs('downloads', exist_ok=True)
     
-    # ✅ تشغيل البوت
-    app.run()
+    # ✅ تشغيل البوت و PyTgCalls بشكل صحيح
+    app.start()
+    pytgcalls.start()
+    logger.info("✅ تم تشغيل البوت و PyTgCalls")
+    idle()
