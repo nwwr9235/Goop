@@ -29,9 +29,17 @@ class MusicConfig:
     """إعدادات بوت الموسيقى"""
     API_ID      = int(os.getenv("API_ID", 0))
     API_HASH    = os.getenv("API_HASH", "")
+    
+    # ✅ توكن البوت المساعد (للمكالمات الصوتية)
+    # يمكن استخدام MUSIC_BOT_TOKEN كـ fallback
+    ASSISTANT_BOT_TOKEN = os.getenv("ASSISTANT_BOT_TOKEN") or os.getenv("MUSIC_BOT_TOKEN", "")
+    
+    # ✅ توكن بوت الموسيقى (للتوافق مع الكود القديم)
     BOT_TOKEN   = os.getenv("MUSIC_BOT_TOKEN", "")
+    
     MONGO_URL   = os.getenv("MONGO_URL", "")
 
-    # المنفذ الذي يستمع عليه بوت الموسيقى لاستقبال الطلبات
-    API_PORT         = int(os.getenv("MUSIC_API_PORT", 8000))
+    # ✅ المنفذ (Railway يستخدم PORT، نستخدمه كأولوية)
+    API_PORT    = int(os.getenv("PORT") or os.getenv("MUSIC_API_PORT", 8000))
+    
     INTERNAL_SECRET  = os.getenv("INTERNAL_SECRET", "change_this_secret_key")
