@@ -1,6 +1,6 @@
 """
 music_bot/player.py
-محرك التشغيل الصوتي — يستخدم MediaStream (الموجود في py-tgcalls 2.2.11)
+محرك التشغيل الصوتي — مع تسجيل مفصل للأخطاء
 """
 
 import asyncio
@@ -10,8 +10,6 @@ import traceback
 import yt_dlp
 from pyrogram import Client
 from pytgcalls import PyTgCalls
-
-# ✅ استخدام MediaStream (الموجود) بدلاً من AudioPiped (غير موجود)
 from pytgcalls.types import MediaStream, AudioQuality, StreamEnded
 
 logger = logging.getLogger(__name__)
@@ -41,45 +39,68 @@ class MusicPlayer:
         logger.info("✅ MusicPlayer initialized")
 
     async def play(self, chat_id: int, query: str, user_id: int, invited_by: int = None) -> dict:
-        logger.info(f"🎵 Play request: chat={chat_id}, query={query}")
+        logger.info(f"="*50)
+        logger.info(f"🎵 PLAY REQUEST: chat_id={chat_id}, query='{query}', user_id={user_id}")
         
-        # التحقق من البوت في المجموعة
+        # ✅ 1. التحقق من البوت في المجموعة
         if self.assistant:
             try:
                 me = await self.assistant.get_me()
-                member = await self.assistant.get_chat_member(chat_id, "me")
-                logger.info(f"✅ Bot status: {member.status}")
+                logger.info(f"🤖 Assistant ID: {me.id}, Username: @{me.username}")
+                
+                try:
+                    member = await self.assistant.get_chat_member(chat_id, "me")
+                    logger.info(f"✅ Bot is in group, status: {member.status}")
+                except Exception as e:
+                    logger.error(f"❌ Bot NOT in group {chat_id}: {e}")
+                    return {
+                        "ok": False, 
+                        "error": "البوت المساعد ليس في المجموعة. أضفه أولاً!"
+                    }
+                    
             except Exception as e:
-                logger.error(f"❌ Bot not in group: {e}")
-                return {"ok": False, "error": f"البوت ليس في المجموعة: {str(e)}"}
+                logger.error(f"❌ Error checking bot status: {e}")
+                return {"ok": False, "error": f"خطأ في التحقق: {str(e)}"}
 
-        # تنزيل الأغنية
+        # ✅ 2. تنزيل الأغنية
         try:
-            logger.info(f"⬇️ Downloading: {query}")
+            logger.info(f"⬇️ Starting download: {query}")
             title, file_path = await self._fetch(query)
-            logger.info(f"✅ Downloaded: {title}")
+            logger.info(f"✅ Download complete: {title} -> {file_path}")
         except Exception as e:
-            logger.error(f"❌ Download error: {e}")
+            logger.error(f"❌ DOWNLOAD ERROR: {e}")
+            logger.error(traceback.format_exc())
             return {"ok": False, "error": f"فشل التنزيل: {str(e)}"}
 
+        # ✅ 3. التحقق من الملف
         if not os.path.exists(file_path):
+            logger.error(f"❌ File not found: {file_path}")
             return {"ok": False, "error": "الملف غير موجود بعد التنزيل"}
         
         file_size = os.path.getsize(file_path)
-        logger.info(f"📁 File size: {file_size} bytes")
+        logger.info(f"📁 File exists: {file_path}, Size: {file_size} bytes")
+        
         if file_size == 0:
+            logger.error(f"❌ File is empty!")
             return {"ok": False, "error": "الملف فارغ"}
 
-        # إضافة للقائمة
+        # ✅ 4. إضافة للقائمة
         track = Track(title=title, url=file_path, query=query, user_id=user_id)
         gq = queue_manager.get(chat_id)
         pos = gq.add(track)
+        logger.info(f"📋 Added to queue at position: {pos}")
 
+        # ✅ 5. بدء التشغيل
         if not gq.is_playing:
+            logger.info(f"▶️ No active playback, starting now...")
             result = await self._start_playback(chat_id)
+            logger.info(f"🎬 Playback result: {result}")
             if not result["ok"]:
                 return result
+        else:
+            logger.info(f"⏸️ Already playing, added to queue")
 
+        logger.info(f"="*50)
         return {"ok": True, "title": title, "position": pos}
 
     async def _start_playback(self, chat_id: int) -> dict:
@@ -87,6 +108,7 @@ class MusicPlayer:
         track = gq.current()
         
         if not track:
+            logger.warning(f"⚠️ No track in queue for {chat_id}")
             gq.is_playing = False
             return {"ok": False, "error": "لا يوجد أغنية في القائمة"}
 
@@ -94,21 +116,29 @@ class MusicPlayer:
         gq.is_paused = False
 
         try:
-            logger.info(f"▶️ Starting: {track.title}")
+            logger.info(f"▶️ STARTING PLAYBACK: {track.title}")
+            logger.info(f"📂 File path: {track.url}")
+            logger.info(f"📂 File exists: {os.path.exists(track.url)}")
+            logger.info(f"📂 File size: {os.path.getsize(track.url)} bytes")
             
-            # ✅ استخدام MediaStream (الموجود في py-tgcalls 2.2.11)
+            # ✅ إنشاء MediaStream
+            logger.info(f"🔧 Creating MediaStream...")
             stream = MediaStream(
                 track.url,
-                audio_parameters=AudioQuality.HIGH,  # ✅ AudioQuality موجود
+                audio_parameters=AudioQuality.HIGH,
             )
+            logger.info(f"✅ MediaStream created")
             
+            # ✅ محاولة التشغيل
+            logger.info(f"🎵 Calling self.calls.play({chat_id}, stream)...")
             await self.calls.play(chat_id, stream)
-            logger.info(f"✅ Playing: {track.title}")
+            logger.info(f"✅ PLAYBACK STARTED: {track.title}")
             return {"ok": True}
 
         except Exception as e:
-            logger.error(f"❌ Playback error: {e}")
-            logger.error(traceback.format_exc())
+            logger.error(f"❌❌❌ PLAYBACK ERROR: {e}")
+            logger.error(f"❌ Error type: {type(e).__name__}")
+            logger.error(f"❌ Full traceback:\n{traceback.format_exc()}")
             gq.is_playing = False
             return {"ok": False, "error": f"فشل التشغيل: {str(e)}"}
 
@@ -116,8 +146,9 @@ class MusicPlayer:
         queue_manager.get(chat_id).clear()
         try:
             await self.calls.leave_call(chat_id)
+            logger.info(f"🛑 Stopped and left {chat_id}")
         except Exception as e:
-            logger.warning(f"Leave error: {e}")
+            logger.warning(f"⚠️ Leave error: {e}")
         return {"ok": True}
 
     async def skip(self, chat_id: int) -> dict:
@@ -178,6 +209,7 @@ class MusicPlayer:
         loop = asyncio.get_event_loop()
 
         def _download():
+            logger.info(f"🔍 yt-dlp searching: {search}")
             with yt_dlp.YoutubeDL(YDL_OPTS) as ydl:
                 info = ydl.extract_info(search, download=True)
                 if "entries" in info:
@@ -188,6 +220,7 @@ class MusicPlayer:
                 if file_path.endswith(('.webm', '.m4a', '.mp4', '.weba')):
                     file_path = file_path.rsplit('.', 1)[0] + '.mp3'
                 
+                logger.info(f"✅ yt-dlp result: {title} -> {file_path}")
                 return title, file_path
 
         return await loop.run_in_executor(None, _download)
