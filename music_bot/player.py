@@ -1,6 +1,6 @@
 """
 music_bot/player.py
-محرك التشغيل الصوتي — مع تسجيل مفصل للأخطاء
+محرك التشغيل الصوتي — Streaming مباشر بدون تحميل
 """
 
 import asyncio
@@ -14,34 +14,23 @@ from pytgcalls.types import MediaStream, AudioQuality, StreamEnded
 
 logger = logging.getLogger(__name__)
 
+# ✅ إعدادات Streaming — بدون تحميل
 YDL_OPTS = {
-    # ✅ bestaudio* يختار أي صيغة صوتية متاحة بدون قيود
     "format": "bestaudio*/best",
     "no_check_formats": True,
     "noplaylist": True,
     "quiet": True,
     "no_warnings": True,
-
     "cookiefile": "/app/cookies.txt",
-
     "extractor_args": {
         "youtube": {
             "player_client": ["tv_embedded", "mweb"]
         }
     },
-
     "nocheckcertificate": True,
     "ignoreerrors": False,
-
-    "outtmpl": "/tmp/music/%(id)s.%(ext)s",
-
-    "postprocessors": [{
-        "key": "FFmpegExtractAudio",
-        "preferredcodec": "mp3",
-        "preferredquality": "192",
-    }],
+    "skip_download": True,
 }
-os.makedirs("/tmp/music", exist_ok=True)
 
 
 class MusicPlayer:
@@ -53,74 +42,57 @@ class MusicPlayer:
         logger.info("✅ MusicPlayer initialized")
 
     async def play(self, chat_id: int, query: str, user_id: int, invited_by: int = None) -> dict:
-        logger.info(f"="*50)
+        logger.info("=" * 50)
         logger.info(f"🎵 PLAY REQUEST: chat_id={chat_id}, query='{query}', user_id={user_id}")
-        
+
         # ✅ 1. التحقق من البوت في المجموعة
         if self.assistant:
             try:
                 me = await self.assistant.get_me()
                 logger.info(f"🤖 Assistant ID: {me.id}, Username: @{me.username}")
-                
                 try:
                     member = await self.assistant.get_chat_member(chat_id, "me")
                     logger.info(f"✅ Bot is in group, status: {member.status}")
                 except Exception as e:
                     logger.error(f"❌ Bot NOT in group {chat_id}: {e}")
-                    return {
-                        "ok": False, 
-                        "error": "البوت المساعد ليس في المجموعة. أضفه أولاً!"
-                    }
-                    
+                    return {"ok": False, "error": "البوت المساعد ليس في المجموعة. أضفه أولاً!"}
             except Exception as e:
                 logger.error(f"❌ Error checking bot status: {e}")
                 return {"ok": False, "error": f"خطأ في التحقق: {str(e)}"}
 
-        # ✅ 2. تنزيل الأغنية
+        # ✅ 2. جلب رابط الـ Stream
         try:
-            logger.info(f"⬇️ Starting download: {query}")
-            title, file_path = await self._fetch(query)
-            logger.info(f"✅ Download complete: {title} -> {file_path}")
+            logger.info(f"🔗 Getting stream URL: {query}")
+            title, stream_url = await self._get_stream_url(query)
+            logger.info(f"✅ Got stream URL: {title}")
         except Exception as e:
-            logger.error(f"❌ DOWNLOAD ERROR: {e}")
+            logger.error(f"❌ STREAM ERROR: {e}")
             logger.error(traceback.format_exc())
-            return {"ok": False, "error": f"فشل التنزيل: {str(e)}"}
+            return {"ok": False, "error": f"فشل جلب الأغنية: {str(e)}"}
 
-        # ✅ 3. التحقق من الملف
-        if not os.path.exists(file_path):
-            logger.error(f"❌ File not found: {file_path}")
-            return {"ok": False, "error": "الملف غير موجود بعد التنزيل"}
-        
-        file_size = os.path.getsize(file_path)
-        logger.info(f"📁 File exists: {file_path}, Size: {file_size} bytes")
-        
-        if file_size == 0:
-            logger.error(f"❌ File is empty!")
-            return {"ok": False, "error": "الملف فارغ"}
-
-        # ✅ 4. إضافة للقائمة
-        track = Track(title=title, url=file_path, query=query, user_id=user_id)
+        # ✅ 3. إضافة للقائمة
+        track = Track(title=title, url=stream_url, query=query, user_id=user_id)
         gq = queue_manager.get(chat_id)
         pos = gq.add(track)
         logger.info(f"📋 Added to queue at position: {pos}")
 
-        # ✅ 5. بدء التشغيل
+        # ✅ 4. بدء التشغيل
         if not gq.is_playing:
-            logger.info(f"▶️ No active playback, starting now...")
+            logger.info("▶️ No active playback, starting now...")
             result = await self._start_playback(chat_id)
             logger.info(f"🎬 Playback result: {result}")
             if not result["ok"]:
                 return result
         else:
-            logger.info(f"⏸️ Already playing, added to queue")
+            logger.info("⏸️ Already playing, added to queue")
 
-        logger.info(f"="*50)
+        logger.info("=" * 50)
         return {"ok": True, "title": title, "position": pos}
 
     async def _start_playback(self, chat_id: int) -> dict:
         gq = queue_manager.get(chat_id)
         track = gq.current()
-        
+
         if not track:
             logger.warning(f"⚠️ No track in queue for {chat_id}")
             gq.is_playing = False
@@ -130,21 +102,18 @@ class MusicPlayer:
         gq.is_paused = False
 
         try:
-            logger.info(f"▶️ STARTING PLAYBACK: {track.title}")
-            logger.info(f"📂 File path: {track.url}")
-            logger.info(f"📂 File exists: {os.path.exists(track.url)}")
-            logger.info(f"📂 File size: {os.path.getsize(track.url)} bytes")
-            
-            logger.info(f"🔧 Creating MediaStream...")
+            logger.info(f"▶️ STARTING STREAM: {track.title}")
+            logger.info(f"🔗 Stream URL: {track.url[:80]}...")
+
+            # ✅ Streaming مباشر من الرابط
             stream = MediaStream(
                 track.url,
                 audio_parameters=AudioQuality.HIGH,
             )
-            logger.info(f"✅ MediaStream created")
-            
-            logger.info(f"🎵 Calling self.calls.play({chat_id}, stream)...")
+            logger.info("✅ MediaStream created")
+
             await self.calls.play(chat_id, stream)
-            logger.info(f"✅ PLAYBACK STARTED: {track.title}")
+            logger.info(f"✅ STREAMING STARTED: {track.title}")
             return {"ok": True}
 
         except Exception as e:
@@ -202,10 +171,8 @@ class MusicPlayer:
             if isinstance(update, StreamEnded):
                 chat_id = update.chat_id
                 logger.info(f"🔴 Stream ended: {chat_id}")
-                
                 gq = queue_manager.get(chat_id)
                 next_track = gq.skip()
-                
                 if next_track:
                     await self._start_playback(chat_id)
                 else:
@@ -216,38 +183,23 @@ class MusicPlayer:
                         pass
 
     @staticmethod
-    async def _fetch(query: str) -> tuple[str, str]:
+    async def _get_stream_url(query: str) -> tuple[str, str]:
+        """جلب رابط الـ Stream مباشرة بدون تحميل"""
         is_url = query.startswith("http")
-        # ✅ nبحث عن 3 نتائج بدل 1 حتى نتجاوز الفيديوهات المحمية
         search = query if is_url else f"ytsearch3:{query}"
         loop = asyncio.get_event_loop()
 
-        def _try_download(video_url: str, title_hint: str) -> tuple[str, str]:
-            """محاولة تحميل فيديو واحد"""
-            opts = {**YDL_OPTS, "noplaylist": True}
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                info = ydl.extract_info(video_url, download=True)
-                if info is None:
-                    raise Exception("فشل التحميل")
-                title = info.get("title", title_hint)
-                file_path = ydl.prepare_filename(info)
-                if file_path.endswith(('.webm', '.m4a', '.mp4', '.weba')):
-                    file_path = file_path.rsplit('.', 1)[0] + '.mp3'
-                if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
-                    raise Exception("الملف فارغ أو غير موجود")
-                return title, file_path
-
-        def _download():
+        def _fetch():
             logger.info(f"🔍 yt-dlp searching: {search}")
 
-            # الخطوة 1: جلب قائمة النتائج بدون تحميل
+            # الخطوة 1: جلب قائمة النتائج
             info_opts = {
                 "quiet": True,
                 "no_warnings": True,
                 "cookiefile": "/app/cookies.txt",
                 "nocheckcertificate": True,
-                "skip_download": True,
                 "extract_flat": True,
+                "skip_download": True,
             }
             with yt_dlp.YoutubeDL(info_opts) as ydl:
                 results = ydl.extract_info(search, download=False)
@@ -255,7 +207,6 @@ class MusicPlayer:
             if results is None:
                 raise Exception("لا توجد نتائج للبحث")
 
-            # استخراج قائمة الفيديوهات
             if is_url:
                 entries = [results]
             else:
@@ -267,17 +218,60 @@ class MusicPlayer:
 
             logger.info(f"📋 وجدت {len(entries)} نتيجة، أجرّب كل واحدة...")
 
-            # الخطوة 2: جرّب كل نتيجة حتى تنجح واحدة
+            # الخطوة 2: جرّب كل نتيجة حتى تنجح
             last_error = None
             for i, entry in enumerate(entries):
                 video_id = entry.get("id", "")
-                video_url = f"https://www.youtube.com/watch?v={video_id}" if video_id and not video_id.startswith("http") else entry.get("url", video_id)
+                video_url = (
+                    f"https://www.youtube.com/watch?v={video_id}"
+                    if video_id and not video_id.startswith("http")
+                    else entry.get("url", video_id)
+                )
                 title_hint = entry.get("title", query)
-                logger.info(f"⬇️ محاولة [{i+1}/{len(entries)}]: {title_hint}")
+                logger.info(f"🔗 محاولة [{i+1}/{len(entries)}]: {title_hint}")
+
                 try:
-                    title, file_path = _try_download(video_url, title_hint)
-                    logger.info(f"✅ نجحت: {title} -> {file_path}")
-                    return title, file_path
+                    # ✅ جلب الرابط المباشر بدون تحميل
+                    with yt_dlp.YoutubeDL(YDL_OPTS) as ydl:
+                        info = ydl.extract_info(video_url, download=False)
+
+                    if info is None:
+                        raise Exception("فشل جلب معلومات الفيديو")
+
+                    # ✅ استخراج أفضل رابط صوتي مباشر
+                    formats = info.get("formats", [])
+
+                    # أولاً: صوت فقط بدون فيديو
+                    audio_formats = [
+                        f for f in formats
+                        if f.get("acodec") != "none"
+                        and f.get("vcodec") == "none"
+                        and f.get("url")
+                    ]
+
+                    # إذا لم يجد صوت فقط، خذ أي format فيه صوت
+                    if not audio_formats:
+                        audio_formats = [
+                            f for f in formats
+                            if f.get("url") and f.get("acodec") != "none"
+                        ]
+
+                    if not audio_formats:
+                        raise Exception("لا يوجد رابط صوتي متاح")
+
+                    # اختر أفضل جودة
+                    best = sorted(
+                        audio_formats,
+                        key=lambda f: f.get("abr") or f.get("tbr") or 0,
+                        reverse=True
+                    )[0]
+
+                    stream_url = best["url"]
+                    title = info.get("title", title_hint)
+
+                    logger.info(f"✅ نجحت: {title}")
+                    return title, stream_url
+
                 except Exception as e:
                     logger.warning(f"⚠️ فشلت [{i+1}]: {e} — أجرّب التالية...")
                     last_error = e
@@ -285,7 +279,7 @@ class MusicPlayer:
 
             raise Exception(f"فشلت جميع النتائج. آخر خطأ: {last_error}")
 
-        return await loop.run_in_executor(None, _download)
+        return await loop.run_in_executor(None, _fetch)
 
 
 # الكلاسات المساعدة
@@ -296,16 +290,19 @@ class Track:
         self.query = query
         self.user_id = user_id
 
+
 class QueueManager:
     def __init__(self):
         self._queues = {}
-    
+
     def get(self, chat_id: int):
         if chat_id not in self._queues:
             self._queues[chat_id] = GroupQueue()
         return self._queues[chat_id]
 
+
 queue_manager = QueueManager()
+
 
 class GroupQueue:
     def __init__(self):
@@ -313,27 +310,26 @@ class GroupQueue:
         self.is_playing = False
         self.is_paused = False
         self.current_index = -1
-    
+
     def add(self, track: Track) -> int:
         self.tracks.append(track)
-        # ✅ إصلاح #3: عند إضافة أول أغنية، اضبط الـ index على 0
         if self.current_index == -1:
             self.current_index = 0
         return len(self.tracks)
-    
+
     def current(self) -> Track | None:
         if 0 <= self.current_index < len(self.tracks):
             return self.tracks[self.current_index]
         return None
-    
+
     def skip(self) -> Track | None:
         self.current_index += 1
         return self.current()
-    
+
     def clear(self):
         self.tracks = []
         self.current_index = -1
         self.is_playing = False
-    
+
     def to_list(self):
         return [{"title": t.title, "user_id": t.user_id} for t in self.tracks]
