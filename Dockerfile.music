@@ -1,25 +1,16 @@
 FROM python:3.11-slim
 
-# ✅ تثبيت المتطلبات الأساسية
 RUN apt-get update && apt-get install -y \
-    build-essential \
-    cmake \
     ffmpeg \
-    libssl-dev \
-    pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# ✅ نسخ ملف المتطلبات من المجلد الصحيح
+# ✅ التغيير المهم: إضافة music_bot/
 COPY music_bot/requirements.txt .
 
 RUN pip install --no-cache-dir -r requirements.txt
 
-# ✅ نسخ جميع الملفات
 COPY . .
-
-# ✅ التحقق من التثبيت
-RUN python -c "import ntgcalls; print(f'NTgCalls: {ntgcalls.__version__}')" || echo "Warning: NTgCalls check failed"
 
 CMD ["python", "-m", "music_bot.main"]
