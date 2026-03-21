@@ -35,16 +35,19 @@ class MusicBridge:
                     url,
                     json=payload,
                     headers=cls.HEADERS,
-                    timeout=aiohttp.ClientTimeout(total=10),
+                    timeout=aiohttp.ClientTimeout(total=60),  # ✅ زيادة الـ timeout لـ 60 ثانية
                 ) as resp:
                     data = await resp.json()
                     return data
-        except aiohttp.ClientConnectorError:
-            logger.error("❌ تعذر الاتصال ببوت الموسيقى — هل هو شغّال؟")
+        except aiohttp.ClientConnectorError as e:
+            logger.error(f"❌ تعذر الاتصال ببوت الموسيقى: {e}")
             return {"ok": False, "error": "music_bot_unreachable"}
+        except aiohttp.ServerTimeoutError:
+            logger.error("❌ انتهت مهلة الاتصال ببوت الموسيقى (timeout)")
+            return {"ok": False, "error": "timeout"}
         except Exception as e:
-            logger.error(f"❌ خطأ في MusicBridge: {e}")
-            return {"ok": False, "error": str(e)}
+            logger.error(f"❌ خطأ في MusicBridge: {type(e).__name__}: {e}")
+            return {"ok": False, "error": str(e) or type(e).__name__}
 
     # ------------------------------------------------------------------ #
     #  الأوامر العامة
