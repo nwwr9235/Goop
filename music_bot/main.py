@@ -1,7 +1,6 @@
 """
 music_bot/main.py
-نقطة انطلاق بوت الموسيقى
-يستخدم pyrofork (بديل pyrogram) للتوافق مع py-tgcalls v2
+نقطة انطلاق بوت الموسيقى - محسّن لـ Railway
 """
 
 import asyncio
@@ -22,41 +21,47 @@ logger = logging.getLogger(__name__)
 
 
 async def main():
-    # ─── 1. Pyrogram Client ───────────────────────────
-    pyrogram_client = Client(
-        "music_bot_session",
+    # ─── 1. البوت المساعد ───────────────────────────
+    assistant_client = Client(
+        "music_assistant_session",
         api_id=MusicConfig.API_ID,
         api_hash=MusicConfig.API_HASH,
-        bot_token=MusicConfig.BOT_TOKEN,
+        bot_token=MusicConfig.ASSISTANT_BOT_TOKEN,
     )
 
     # ─── 2. PyTgCalls ─────────────────────────────────
-    tgcalls = PyTgCalls(pyrogram_client)
+    tgcalls = PyTgCalls(assistant_client)
 
     # ─── 3. MusicPlayer ─────────────────────────────────
-    player = MusicPlayer(tgcalls)
+    player = MusicPlayer(tgcalls, assistant_client)
 
     # ─── 4. FastAPI ─────────────────────────────────────
     fastapi_app = build_app(player)
 
+    # ✅ إعدادات محسّنة لـ Railway
     config = uvicorn.Config(
         fastapi_app,
         host="0.0.0.0",
-        port=MusicConfig.API_PORT,
+        port=int(os.getenv("PORT", 8000)),  # Railway يستخدم PORT
         loop="asyncio",
-        log_level="warning",
+        log_level="info",  # تغيير لرؤية المزيد من التفاصيل
+        # ✅ إضافات مهمة لـ Railway
+        proxy_headers=True,
+        forwarded_allow_ips="*",  # السماح بجميع الـ IPs
     )
     server = uvicorn.Server(config)
 
-    logger.info(f"🎵 بوت الموسيقى يعمل | API port: {MusicConfig.API_PORT}")
+    logger.info(f"🎵 بوت الموسيقى يعمل | API port: {config.port}")
+    logger.info("🤖 جاري بدء البوت...")
 
-    # ✅ FIXED: لا تستدعِ pyrogram_client.start() منفصلاً
-    # PyTgCalls.start() سيبدأ Pyrogram Client تلقائياً
-    await asyncio.gather(
-        tgcalls.start(),      # ← هذا يبدأ Pyrogram Client أيضاً
-        server.serve(),
-    )
+    # ✅ ترتيب صحيح: PyTgCalls أولاً ثم Uvicorn
+    await tgcalls.start()
+    logger.info("✅ PyTgCalls started")
+    
+    # تشغيل Uvicorn
+    await server.serve()
 
 
 if __name__ == "__main__":
+    import os  # نقل الاستيراد هنا
     asyncio.run(main())
