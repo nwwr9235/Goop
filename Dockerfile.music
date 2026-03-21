@@ -1,30 +1,22 @@
 FROM python:3.11-slim
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg git curl build-essential \
+# ✅ تثبيت المتطلبات الأساسية لـ NTgCalls
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    ffmpeg \
+    libssl-dev \
+    pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-COPY music_bot/requirements.txt ./music_bot/requirements.txt
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# ✅ تثبيت المكتبات مع force-reinstall للتأكد من عدم وجود cached packages قديمة
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir --force-reinstall pyrofork==2.3.38 tgcrypto && \
-    pip install --no-cache-dir --force-reinstall py-tgcalls==2.2.11 && \
-    pip install --no-cache-dir --force-reinstall -r music_bot/requirements.txt
+# ✅ التحقق من التثبيت
+RUN python -c "import ntgcalls; print(f'NTgCalls: {ntgcalls.__version__}')" || echo "NTgCalls check failed"
 
-# التحقق من التوافق
-RUN python -c "from pytgcalls import PyTgCalls; from pytgcalls.types import StreamEnded; print('✅ PyTgCalls و StreamEnded جاهزان')"
-
-COPY shared/ ./shared/
-COPY music_bot/ ./music_bot/
-
-RUN mkdir -p /tmp/music
-
-ENV PYTHONPATH=/app
-ENV PYTHONUNBUFFERED=1
-
-EXPOSE 8000
+COPY . .
 
 CMD ["python", "-m", "music_bot.main"]
