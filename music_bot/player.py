@@ -300,4 +300,3 @@ class GroupQueue:
     
     def to_list(self):
         return [{"title": t.title, "user_id": t.user_id} for t in self.tracks]
-
