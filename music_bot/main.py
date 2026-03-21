@@ -1,34 +1,61 @@
 """
 music_bot/main.py
-اختبار تثبيت NTgCalls
 """
 
+import asyncio
 import logging
-logging.basicConfig(level=logging.INFO)
+import uvicorn
+from pyrogram import Client
+from pytgcalls import PyTgCalls
+
+from shared.config import MusicConfig
+from music_bot.player import MusicPlayer
+from music_bot.api_server import build_app
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(name)s | %(levelname)s | %(message)s",
+)
 logger = logging.getLogger(__name__)
 
-# ✅ اختبار 1: هل ntgcalls مثبت؟
-try:
-    import ntgcalls
-    logger.info(f"✅ NTgCalls imported: {ntgcalls.__version__}")
-except ImportError as e:
-    logger.error(f"❌ NTgCalls NOT installed: {e}")
-    logger.error("الحل: pip install ntgcalls")
-    raise
 
-# ✅ اختبار 2: هل py-tgcalls يعمل؟
-try:
-    from pytgcalls import PyTgCalls
-    logger.info("✅ PyTgCalls imported")
-except ImportError as e:
-    logger.error(f"❌ PyTgCalls error: {e}")
-    raise
+async def main():
+    # البوت المساعد
+    assistant_client = Client(
+        "music_assistant_session",
+        api_id=MusicConfig.API_ID,
+        api_hash=MusicConfig.API_HASH,
+        bot_token=MusicConfig.ASSISTANT_BOT_TOKEN,
+    )
 
-# ✅ اختبار 3: ما هي الأنواع المتاحة؟
-try:
-    import pytgcalls.types
-    logger.info(f"Available in pytgcalls.types: {dir(pytgcalls.types)}")
-except Exception as e:
-    logger.error(f"Error checking types: {e}")
+    # PyTgCalls
+    tgcalls = PyTgCalls(assistant_client)
 
-# ... باقي الكود
+    # ✅ تمرير assistant_client للـ MusicPlayer
+    player = MusicPlayer(tgcalls, assistant_client)
+
+    # FastAPI
+    fastapi_app = build_app(player)
+
+    config = uvicorn.Config(
+        fastapi_app,
+        host="0.0.0.0",
+        port=int(os.getenv("PORT", 8000)),
+        loop="asyncio",
+        log_level="info",
+    )
+    server = uvicorn.Server(config)
+
+    logger.info(f"🎵 Music Bot starting on port {config.port}")
+
+    # تشغيل PyTgCalls أولاً
+    await tgcalls.start()
+    logger.info("✅ PyTgCalls started")
+    
+    # تشغيل Uvicorn
+    await server.serve()
+
+
+if __name__ == "__main__":
+    import os
+    asyncio.run(main())
