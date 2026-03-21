@@ -14,25 +14,23 @@ from pytgcalls.types import MediaStream, AudioQuality, StreamEnded
 
 logger = logging.getLogger(__name__)
 
+# ✅ إصلاح #1: format أكثر مرونة لتجنب "Requested format is not available"
 YDL_OPTS = {
-    "format": "bestaudio/best",
+    "format": "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best[ext=mp4]/best",
     "noplaylist": True,
     "quiet": True,
     "no_warnings": True,
 
-    # ✅ أهم سطر (cookies)
     "cookiefile": "/app/cookies.txt",
 
-    # تحسين التوافق مع يوتيوب
     "extractor_args": {
         "youtube": {
             "player_client": ["android", "web"]
         }
     },
 
-    # تحسين التحميل
     "nocheckcertificate": True,
-    "ignoreerrors": True,
+    "ignoreerrors": False,  # ✅ إصلاح #1: False حتى نحصل على الخطأ الحقيقي بدل None
 
     "outtmpl": "/tmp/music/%(id)s.%(ext)s",
 
@@ -136,7 +134,6 @@ class MusicPlayer:
             logger.info(f"📂 File exists: {os.path.exists(track.url)}")
             logger.info(f"📂 File size: {os.path.getsize(track.url)} bytes")
             
-            # ✅ إنشاء MediaStream
             logger.info(f"🔧 Creating MediaStream...")
             stream = MediaStream(
                 track.url,
@@ -144,7 +141,6 @@ class MusicPlayer:
             )
             logger.info(f"✅ MediaStream created")
             
-            # ✅ محاولة التشغيل
             logger.info(f"🎵 Calling self.calls.play({chat_id}, stream)...")
             await self.calls.play(chat_id, stream)
             logger.info(f"✅ PLAYBACK STARTED: {track.title}")
@@ -227,8 +223,21 @@ class MusicPlayer:
             logger.info(f"🔍 yt-dlp searching: {search}")
             with yt_dlp.YoutubeDL(YDL_OPTS) as ydl:
                 info = ydl.extract_info(search, download=True)
+
+                # ✅ إصلاح #2: فحص info قبل استخدامه
+                if info is None:
+                    raise Exception("لم يتم العثور على نتائج أو فشل التحميل")
+
                 if "entries" in info:
-                    info = info["entries"][0]
+                    entries = [e for e in info["entries"] if e is not None]
+                    if not entries:
+                        raise Exception("لا توجد نتائج صالحة في البحث")
+                    info = entries[0]
+
+                # ✅ إصلاح #2: فحص info مرة ثانية بعد entries
+                if info is None:
+                    raise Exception("النتيجة الأولى من البحث فارغة")
+
                 title = info.get("title", query)
                 file_path = ydl.prepare_filename(info)
                 
@@ -269,6 +278,9 @@ class GroupQueue:
     
     def add(self, track: Track) -> int:
         self.tracks.append(track)
+        # ✅ إصلاح #3: عند إضافة أول أغنية، اضبط الـ index على 0
+        if self.current_index == -1:
+            self.current_index = 0
         return len(self.tracks)
     
     def current(self) -> Track | None:
