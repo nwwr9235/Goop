@@ -217,36 +217,73 @@ class MusicPlayer:
 
     @staticmethod
     async def _fetch(query: str) -> tuple[str, str]:
-        search = query if query.startswith("http") else f"ytsearch1:{query}"
+        is_url = query.startswith("http")
+        # ✅ nبحث عن 3 نتائج بدل 1 حتى نتجاوز الفيديوهات المحمية
+        search = query if is_url else f"ytsearch3:{query}"
         loop = asyncio.get_event_loop()
+
+        def _try_download(video_url: str, title_hint: str) -> tuple[str, str]:
+            """محاولة تحميل فيديو واحد"""
+            opts = {**YDL_OPTS, "noplaylist": True}
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(video_url, download=True)
+                if info is None:
+                    raise Exception("فشل التحميل")
+                title = info.get("title", title_hint)
+                file_path = ydl.prepare_filename(info)
+                if file_path.endswith(('.webm', '.m4a', '.mp4', '.weba')):
+                    file_path = file_path.rsplit('.', 1)[0] + '.mp3'
+                if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
+                    raise Exception("الملف فارغ أو غير موجود")
+                return title, file_path
 
         def _download():
             logger.info(f"🔍 yt-dlp searching: {search}")
-            with yt_dlp.YoutubeDL(YDL_OPTS) as ydl:
-                info = ydl.extract_info(search, download=True)
 
-                # ✅ إصلاح #2: فحص info قبل استخدامه
-                if info is None:
-                    raise Exception("لم يتم العثور على نتائج أو فشل التحميل")
+            # الخطوة 1: جلب قائمة النتائج بدون تحميل
+            info_opts = {
+                "quiet": True,
+                "no_warnings": True,
+                "cookiefile": "/app/cookies.txt",
+                "nocheckcertificate": True,
+                "skip_download": True,
+                "extract_flat": True,
+            }
+            with yt_dlp.YoutubeDL(info_opts) as ydl:
+                results = ydl.extract_info(search, download=False)
 
-                if "entries" in info:
-                    entries = [e for e in info["entries"] if e is not None]
-                    if not entries:
-                        raise Exception("لا توجد نتائج صالحة في البحث")
-                    info = entries[0]
+            if results is None:
+                raise Exception("لا توجد نتائج للبحث")
 
-                # ✅ إصلاح #2: فحص info مرة ثانية بعد entries
-                if info is None:
-                    raise Exception("النتيجة الأولى من البحث فارغة")
+            # استخراج قائمة الفيديوهات
+            if is_url:
+                entries = [results]
+            else:
+                entries = results.get("entries", [])
+                entries = [e for e in entries if e is not None]
 
-                title = info.get("title", query)
-                file_path = ydl.prepare_filename(info)
-                
-                if file_path.endswith(('.webm', '.m4a', '.mp4', '.weba')):
-                    file_path = file_path.rsplit('.', 1)[0] + '.mp3'
-                
-                logger.info(f"✅ yt-dlp result: {title} -> {file_path}")
-                return title, file_path
+            if not entries:
+                raise Exception("لا توجد نتائج صالحة")
+
+            logger.info(f"📋 وجدت {len(entries)} نتيجة، أجرّب كل واحدة...")
+
+            # الخطوة 2: جرّب كل نتيجة حتى تنجح واحدة
+            last_error = None
+            for i, entry in enumerate(entries):
+                video_id = entry.get("id", "")
+                video_url = f"https://www.youtube.com/watch?v={video_id}" if video_id and not video_id.startswith("http") else entry.get("url", video_id)
+                title_hint = entry.get("title", query)
+                logger.info(f"⬇️ محاولة [{i+1}/{len(entries)}]: {title_hint}")
+                try:
+                    title, file_path = _try_download(video_url, title_hint)
+                    logger.info(f"✅ نجحت: {title} -> {file_path}")
+                    return title, file_path
+                except Exception as e:
+                    logger.warning(f"⚠️ فشلت [{i+1}]: {e} — أجرّب التالية...")
+                    last_error = e
+                    continue
+
+            raise Exception(f"فشلت جميع النتائج. آخر خطأ: {last_error}")
 
         return await loop.run_in_executor(None, _download)
 
