@@ -30,6 +30,8 @@ YDL_OPTS = {
     "nocheckcertificate": True,
     "ignoreerrors": False,
     "skip_download": True,
+    # ✅ البروكسي لتجاوز حجب يوتيوب على السيرفرات السحابية
+    "proxy": os.environ.get("PROXY_URL", ""),
 }
 
 
@@ -200,6 +202,7 @@ class MusicPlayer:
                 "nocheckcertificate": True,
                 "extract_flat": True,
                 "skip_download": True,
+                "proxy": os.environ.get("PROXY_URL", ""),
             }
             with yt_dlp.YoutubeDL(info_opts) as ydl:
                 results = ydl.extract_info(search, download=False)
