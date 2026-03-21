@@ -26,7 +26,7 @@ YDL_OPTS = {
 
     "extractor_args": {
         "youtube": {
-            "player_client": ["android", "web"]
+            "player_client": ["tv_embedded", "mweb"]
         }
     },
 
