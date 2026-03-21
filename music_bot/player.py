@@ -14,9 +14,10 @@ from pytgcalls.types import MediaStream, AudioQuality, StreamEnded
 
 logger = logging.getLogger(__name__)
 
-# ✅ إصلاح #1: format أكثر مرونة لتجنب "Requested format is not available"
 YDL_OPTS = {
-    "format": "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best[ext=mp4]/best",
+    # ✅ format بسيط + no_check_formats هو الحل الحقيقي
+    "format": "bestaudio/best",
+    "no_check_formats": True,       # ✅ يتجاوز خطأ "Requested format is not available"
     "noplaylist": True,
     "quiet": True,
     "no_warnings": True,
@@ -30,7 +31,7 @@ YDL_OPTS = {
     },
 
     "nocheckcertificate": True,
-    "ignoreerrors": False,  # ✅ إصلاح #1: False حتى نحصل على الخطأ الحقيقي بدل None
+    "ignoreerrors": False,
 
     "outtmpl": "/tmp/music/%(id)s.%(ext)s",
 
@@ -299,3 +300,4 @@ class GroupQueue:
     
     def to_list(self):
         return [{"title": t.title, "user_id": t.user_id} for t in self.tracks]
+
