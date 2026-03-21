@@ -1,21 +1,17 @@
-FROM python:3.11-slim
+FROM python:3.11-bullseye
 
-# ✅ تثبيت المتطلبات الأساسية لـ NTgCalls
+# ✅ تثبيت FFmpeg وCMake
 RUN apt-get update && apt-get install -y \
-    build-essential \
-    cmake \
     ffmpeg \
-    libssl-dev \
-    pkg-config \
+    cmake \
+    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# ✅ التحقق من التثبيت
-RUN python -c "import ntgcalls; print(f'NTgCalls: {ntgcalls.__version__}')" || echo "NTgCalls check failed"
+RUN pip install --upgrade pip
+RUN pip install py-tgcalls==2.0.6 pyrofork yt-dlp fastapi uvicorn
 
 COPY . .
 
