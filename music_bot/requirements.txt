@@ -1,14 +1,30 @@
+# ✅ النواة الأساسية
 pyrofork==2.3.38
 tgcrypto>=1.2.5
 py-tgcalls==2.2.11
 ntgcalls>=2.1.0
+
+# ✅ قاعدة البيانات والبيئة
 motor>=3.0.0
 python-dotenv>=1.0.0
-yt-dlp>=2024.1.0
+
+# ✅ خادم الويب
 fastapi>=0.110.0
 uvicorn[standard]>=0.29.0
 pydantic>=2.0.0
 
-# ✅ إضافات جديدة
+# ✅ استخراج YouTube - yt-dlp أساسي (محدث)
+yt-dlp>=2024.12.0
+
+# ✅ إضافات yt-dlp الموصى بها
+# brotli>=1.1.0          # ضغط أفضل
+# websockets>=12.0       # WebSocket support
+# requests>=2.31.0       # HTTP محسن
+# certifi>=2024.0.0      # شهادات SSL
+
+# ✅ pytube احتياطي فقط (قديم، قد لا يعمل)
 pytube>=15.0.0
 youtube-search-python>=1.6.6
+
+# ✅ أدوات إضافية للاستقرار
+aiohttp>=3.9.0
