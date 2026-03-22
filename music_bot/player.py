@@ -449,6 +449,9 @@ class GroupQueue:
     
     def add(self, track: Track) -> int:
         self.tracks.append(track)
+        # ✅ ضبط الـ index عند إضافة أول أغنية
+        if self.current_index == -1:
+            self.current_index = 0
         return len(self.tracks)
     
     def current(self) -> Track | None:
@@ -467,5 +470,4 @@ class GroupQueue:
     
     def to_list(self):
         return [{"title": t.title, "user_id": t.user_id} for t in self.tracks]
-
 
